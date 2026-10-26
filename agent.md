@@ -20,34 +20,40 @@ This file captures what was done in this session and what remains to continue la
 ### Navigation & App Shell
 - Fixed Expo Router 58 compatibility: `components/HapticTab.tsx`, `components/ui/TabBarBackground.ios.tsx` imports corrected.
 - Updated `app/_layout.tsx`: Inter fonts (optimized to used weights), ThemeProvider with tokens, StatusBar, Stack routes `(tabs)`, `product/[id]`, `checkout`, `auth` (modal), `+not-found`, `Toast`.
-- Updated `app/(tabs)/_layout.tsx`: 4 tabs (Home/Shop/Cart/Profile), Cart badge capped to 9+, hidden routes for search/favorites, theme-based styling.
+- Updated `app/(tabs)/_layout.tsx`: 4 tabs (Home/Shop/Cart/Profile), Cart badge capped to 9+, hidden routes for search/favorites, theme-based styling. Cart syncs to Supabase on login.
 - Moved product route to `app/product/[id].tsx` (stack route, not hidden tab).
 
 ### Screens
-- `app/(tabs)/index.tsx`: Redesigned Home with hero, trust row, categories, featured, new arrivals, banner. Uses DummyJSON via product store.
+- `app/(tabs)/index.tsx`: Redesigned Home with hero, trust row, categories, featured, new arrivals, banner.
 - `app/(tabs)/shop.tsx`: Category filter, search, sort, 2-col grid, empty state.
 - `app/(tabs)/search.tsx`: Live search (>=2 chars), trending/categories suggestions.
 - `app/(tabs)/favorites.tsx`: Persisted favorites via `store/favoritesStore.ts`, clear all.
-- `app/(tabs)/cart.tsx`: Cart with quantity/clear, free shipping progress, promo (SHOP10), order summary, checkout navigation.
-- `app/(tabs)/profile.tsx`: Account card, stats, menu groups, preferences toggles, sign in/out (demo mode aware).
+- `app/(tabs)/cart.tsx`: Cart with quantity/clear, free shipping progress, promo (SHOP10), order summary, checkout navigation. Synced to Supabase when logged in.
+- `app/(tabs)/profile.tsx`: Account card, stats (live order count), menu groups, preferences toggles, sign in/out. Links to Orders screen.
 - `app/product/[id].tsx`: Gallery, rating/stock/badges, description expand, quantity, related products, sticky add-to-cart/buy now.
-- `app/auth.tsx`: Sign in/sign up UI (Supabase ready, demo notice if not configured).
-- `app/checkout.tsx`: Delivery/payment/address selection, order summary, place order -> success with order number, cart cleared.
+- `app/auth.tsx`: Sign in/sign up UI (Supabase ready).
+- `app/checkout.tsx`: Delivery/payment/address selection, order summary, place order creates order + order_items in Supabase when logged in, clears cart on success.
+- `app/orders.tsx`: New orders history screen showing order number, status, items, totals with pull-to-refresh.
 - `app/+not-found.tsx`: Branded not found.
 
 ### Stores & Utils
-- `store/cartStore.ts`: Persisted cart (add/update/remove/clear, helpers).
-- `store/favoritesStore.ts`: Persisted favorites.
-- `store/productStore.ts`: Fetch products/categories from DummyJSON.
-- `store/authStore.ts`: Guards for missing Supabase config.
-- `lib/api.ts`: Switched to DummyJSON with discount calculation for compare-at price, added images/brand/stock.
-- `lib/format.ts`, `lib/supabase.ts` updated for robustness.
-- `type.ts`: Extended Product/added CartItem.
+- `store/cartStore.ts`: Supabase-synced cart (loads from DB on login, merges local cart, syncs add/update/remove/clear). Falls back to local for guests. Persists with AsyncStorage.
+- `store/favoritesStore.ts`: Persisted favorites (supports string/number IDs).
+- `store/productStore.ts`: Fetch products/categories from Supabase (via lib/api) with caching.
+- `store/authStore.ts`: Supabase auth with session persistence.
+- `lib/api.ts`: Switched to Supabase-first (reads from products/categories/product_images with joins). Falls back to DummyJSON if not configured. Handles UUID/string IDs.
+- `lib/format.ts`, `lib/supabase.ts`, `config.ts` updated for robustness and env fallbacks.
+- `type.ts`: Extended Product (string|number id, slug), CartItem compatible with UUIDs.
 
 ### Supabase
 - `supabase/migrations/0001_init.sql`: Full schema (profiles, categories, products, product_images, favorites, carts/cart_items, addresses, coupons, orders/order_items, reviews) with triggers, RLS, search vector, auto profile/cart on signup, rating aggregation.
-- `supabase/seed.sql`: Category/product seed (DummyJSON-like catalog) with images and coupons (SHOP10, WELCOME5).
-- `client-app/.env.example`: Supabase env vars.
+- `supabase/seed.sql`: Category/product seed (39 products across 24 categories) with images and coupons (SHOP10, WELCOME5).
+- `supabase/fix_grants.sql`: Grants for authenticated/anon roles on public schema/tables/sequences/functions.
+- `client-app/.env.example`: Supabase env vars. Added hardcoded fallbacks in `config.ts` for dev.
+- Applied grants and schema to Supabase project.
+
+### Git/Repo
+- Updated `.gitignore` files to ignore `.env` but keep `.env.example`.
 
 ### Validation
 - `client-app`: `npx tsc --noEmit` passes, `npm run lint` passes (Expo lint), `npx expo export --platform android` succeeds.

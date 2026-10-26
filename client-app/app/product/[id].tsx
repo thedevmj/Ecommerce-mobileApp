@@ -61,7 +61,7 @@ export default function ProductScreen() {
       setLoading(true);
       setError(null);
       try {
-        const data = await getProduct(Number(id));
+        const data = await getProduct(id as string);
         if (active) setProduct(data);
       } catch {
         if (active) setError("We couldn't load this product. Please try again.");

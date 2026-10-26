@@ -3,8 +3,8 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 interface FavoritesState {
-  ids: number[];
-  toggle: (productId: number) => void;
+  ids: (string | number)[];
+  toggle: (productId: string | number) => void;
   clear: () => void;
 }
 

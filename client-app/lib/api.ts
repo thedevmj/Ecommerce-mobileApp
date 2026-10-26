@@ -1,69 +1,113 @@
 import { Product } from "@/type";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
-const API_URL = "https://dummyjson.com";
-
-interface DummyJsonProduct {
-  id: number;
+interface SupabaseProduct {
+  id: string;
   title: string;
   description: string;
-  category: string;
   price: number;
-  discountPercentage?: number;
+  compare_at_price?: number | null;
+  brand?: string | null;
+  stock: number;
   rating: number;
-  stock?: number;
-  brand?: string;
-  thumbnail?: string;
-  images?: string[];
-  reviews?: unknown[];
+  review_count: number;
+  image_url?: string | null;
+  is_active: boolean;
+  slug: string;
+  categories?: { slug: string; name: string } | { slug: string; name: string }[] | null;
+  product_images?: { url: string; position: number }[] | null;
 }
 
-interface DummyJsonProductsResponse {
-  products: DummyJsonProduct[];
-  total: number;
-  skip: number;
-  limit: number;
-}
+const mapSupabaseProduct = (product: SupabaseProduct): Product => {
+  const cat = Array.isArray(product.categories) ? product.categories[0] : product.categories;
+  const images = (product.product_images || [])
+    .sort((a, b) => a.position - b.position)
+    .map((img) => img.url)
+    .filter(Boolean);
 
-const mapProduct = (product: DummyJsonProduct): Product => {
-  const discount = product.discountPercentage ?? 0;
-  const compareAtPrice =
-    discount > 0
-      ? Math.round((product.price / (1 - discount / 100)) * 100) / 100
-      : undefined;
+  const image = product.image_url || images[0] || "";
 
   return {
     id: product.id,
     title: product.title,
-    price: product.price,
-    description: product.description,
-    category: product.category,
-    image: product.thumbnail || product.images?.[0] || "",
-    images: product.images,
-    brand: product.brand,
+    price: Number(product.price),
+    description: product.description || "",
+    category: cat?.slug || "",
+    image,
+    images: images.length > 0 ? images : undefined,
+    brand: product.brand || undefined,
     stock: product.stock,
-    compareAtPrice,
+    compareAtPrice: product.compare_at_price ? Number(product.compare_at_price) : undefined,
     rating: {
-      rate: product.rating,
-      count: product.reviews?.length ?? 0,
+      rate: Number(product.rating || 0),
+      count: Number(product.review_count || 0),
     },
+    slug: product.slug,
   };
 };
 
-const request = async <T>(path: string): Promise<T> => {
-  const response = await fetch(`${API_URL}${path}`);
-
-  if (!response.ok) {
-    throw new Error(`Request failed with status ${response.status}`);
-  }
-
-  return (await response.json()) as T;
-};
-
-// Get all Products
+// Get all Products from Supabase
 const getProducts = async (): Promise<Product[]> => {
   try {
-    const data = await request<DummyJsonProductsResponse>("/products?limit=0");
-    return data.products.map(mapProduct);
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase
+        .from("products")
+        .select(
+          `
+          id,
+          title,
+          description,
+          price,
+          compare_at_price,
+          brand,
+          stock,
+          rating,
+          review_count,
+          image_url,
+          slug,
+          is_active,
+          categories (slug, name),
+          product_images (url, position)
+        `
+        )
+        .eq("is_active", true)
+        .order("created_at", { ascending: true });
+
+      if (error) throw error;
+      if (data) {
+        return (data as SupabaseProduct[]).map(mapSupabaseProduct);
+      }
+    }
+
+    // Fallback to DummyJSON if Supabase not configured
+    const response = await fetch("https://dummyjson.com/products?limit=0");
+    if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+    const data = await response.json();
+    const products = data.products || [];
+
+    return products.map((product: any) => {
+      const discount = product.discountPercentage ?? 0;
+      const compareAtPrice =
+        discount > 0
+          ? Math.round((product.price / (1 - discount / 100)) * 100) / 100
+          : undefined;
+      return {
+        id: product.id,
+        title: product.title,
+        price: product.price,
+        description: product.description,
+        category: product.category,
+        image: product.thumbnail || product.images?.[0] || "",
+        images: product.images,
+        brand: product.brand,
+        stock: product.stock,
+        compareAtPrice,
+        rating: {
+          rate: product.rating,
+          count: product.reviews?.length ?? 0,
+        },
+      };
+    });
   } catch (error) {
     console.log("Failed to fetch products", error);
     throw error;
@@ -71,10 +115,70 @@ const getProducts = async (): Promise<Product[]> => {
 };
 
 // Get single product
-export const getProduct = async (id: number): Promise<Product> => {
+export const getProduct = async (id: string | number): Promise<Product> => {
   try {
-    const data = await request<DummyJsonProduct>(`/products/${id}`);
-    return mapProduct(data);
+    if (isSupabaseConfigured) {
+      const query = supabase
+        .from("products")
+        .select(
+          `
+          id,
+          title,
+          description,
+          price,
+          compare_at_price,
+          brand,
+          stock,
+          rating,
+          review_count,
+          image_url,
+          slug,
+          is_active,
+          categories (slug, name),
+          product_images (url, position)
+        `
+        )
+        .eq("is_active", true);
+
+      // Try by id (uuid) first, if fails try by slug
+      const { data: byId, error: idError } = await query.eq("id", String(id)).maybeSingle();
+      if (byId && !idError) {
+        return mapSupabaseProduct(byId as SupabaseProduct);
+      }
+
+      const { data: bySlug, error: slugError } = await query.eq("slug", String(id)).maybeSingle();
+      if (bySlug && !slugError) {
+        return mapSupabaseProduct(bySlug as SupabaseProduct);
+      }
+
+      if (idError && slugError) throw idError || slugError;
+    }
+
+    // Fallback
+    const response = await fetch(`https://dummyjson.com/products/${id}`);
+    if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+    const product = await response.json();
+    const discount = product.discountPercentage ?? 0;
+    const compareAtPrice =
+      discount > 0
+        ? Math.round((product.price / (1 - discount / 100)) * 100) / 100
+        : undefined;
+    return {
+      id: product.id,
+      title: product.title,
+      price: product.price,
+      description: product.description,
+      category: product.category,
+      image: product.thumbnail || product.images?.[0] || "",
+      images: product.images,
+      brand: product.brand,
+      stock: product.stock,
+      compareAtPrice,
+      rating: {
+        rate: product.rating,
+        count: product.reviews?.length ?? 0,
+      },
+    };
   } catch (error) {
     console.error(`Failed to fetch product with ID ${id}:`, error);
     throw error;
@@ -84,7 +188,22 @@ export const getProduct = async (id: number): Promise<Product> => {
 // Get all categories
 const getCategories = async (): Promise<string[]> => {
   try {
-    return await request<string[]>("/products/category-list");
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase
+        .from("categories")
+        .select("slug")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true });
+
+      if (error) throw error;
+      if (data && data.length > 0) {
+        return data.map((cat) => cat.slug);
+      }
+    }
+
+    const response = await fetch("https://dummyjson.com/products/category-list");
+    if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+    return await response.json();
   } catch (error) {
     console.log("Failed to fetch categories", error);
     throw error;

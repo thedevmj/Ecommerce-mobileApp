@@ -16,6 +16,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { radius, shadows, space, typography } from "@/constants/theme";
 import { useAppTheme } from "@/hooks/useAppTheme";
 import { formatPrice } from "@/lib/format";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { useAuthStore } from "@/store/authStore";
 import { cartSubtotal, useCartStore } from "@/store/cartStore";
 
 type DeliveryKey = "standard" | "express";
@@ -63,21 +65,102 @@ export default function CheckoutScreen() {
   const insets = useSafeAreaInsets();
   const items = useCartStore((state) => state.items);
   const clear = useCartStore((state) => state.clear);
+  const user = useAuthStore((state) => state.user);
   const [delivery, setDelivery] = useState<DeliveryKey>("standard");
   const [payment, setPayment] = useState<PaymentKey>("card");
   const [placed, setPlaced] = useState(false);
-  const [orderNumber] = useState(
+  const [orderNumber, setOrderNumber] = useState(
     () => `SC-${Math.random().toString(36).slice(2, 10).toUpperCase()}`
   );
+  const [placing, setPlacing] = useState(false);
 
   const subtotal = cartSubtotal(items);
   const shipping =
     delivery === "express" ? 9.99 : subtotal >= 50 ? 0 : 4.99;
   const total = subtotal + shipping;
 
-  const placeOrder = () => {
-    setPlaced(true);
-    clear();
+  const placeOrder = async () => {
+    if (items.length === 0) return;
+
+    if (!user) {
+      Toast.show({
+        type: "info",
+        text1: "Sign in required",
+        text2: "Please sign in to place your order.",
+      });
+      router.push("/auth");
+      return;
+    }
+
+    if (!isSupabaseConfigured) {
+      setPlaced(true);
+      clear();
+      Toast.show({
+        type: "success",
+        text1: "Order placed (demo)",
+        text2: "Connect Supabase to save orders.",
+      });
+      return;
+    }
+
+    setPlacing(true);
+    try {
+      const shippingAddress = {
+        label: "Home",
+        recipient: user.email.split("@")[0],
+        line1: "123 Market Street",
+        city: "San Francisco",
+        state: "CA",
+        postal_code: "94103",
+        country: "US",
+        phone: "+1 (415) 555-0132",
+      };
+
+      const { data: order, error: orderError } = await supabase
+        .from("orders")
+        .insert({
+          user_id: user.id,
+          subtotal,
+          discount: 0,
+          shipping,
+          tax: 0,
+          total,
+          shipping_address: shippingAddress,
+          status: "pending",
+        })
+        .select("id, order_number")
+        .single();
+
+      if (orderError) throw orderError;
+      if (order?.order_number) setOrderNumber(order.order_number);
+
+      const orderItemsPayload = items.map((item) => ({
+        order_id: order.id,
+        product_id: typeof item.product.id === "string" ? item.product.id : null,
+        title_snapshot: item.product.title,
+        image_snapshot: item.product.image,
+        unit_price: item.product.price,
+        quantity: item.quantity,
+      }));
+
+      const { error: itemsError } = await supabase
+        .from("order_items")
+        .insert(orderItemsPayload);
+
+      if (itemsError) throw itemsError;
+
+      setPlaced(true);
+      clear();
+    } catch (error: any) {
+      console.log("Checkout error:", error);
+      Toast.show({
+        type: "error",
+        text1: "Failed to place order",
+        text2: error?.message || error?.details || "Please try again.",
+      });
+    } finally {
+      setPlacing(false);
+    }
   };
 
   if (placed) {
@@ -451,9 +534,10 @@ export default function CheckoutScreen() {
           </Text>
         </View>
         <Button
-          title="Place order"
+          title={placing ? "Placing order..." : "Place order"}
           onPress={placeOrder}
-          icon="lock-outline"
+          icon={placing ? undefined : "lock-outline"}
+          disabled={placing}
           style={styles.placeButton}
         />
       </View>

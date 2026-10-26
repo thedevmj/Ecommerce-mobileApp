@@ -1,5 +1,5 @@
 export interface Product {
-  id: number;
+  id: string | number;
   title: string;
   price: number;
   description: string;
@@ -10,6 +10,7 @@ export interface Product {
   stock?: number;
   compareAtPrice?: number;
   rating: { rate: number; count: number };
+  slug?: string;
 }
 
 export interface CartItem {

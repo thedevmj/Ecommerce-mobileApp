@@ -15,7 +15,7 @@ import Button from "@/components/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { radius, shadows, space, typography } from "@/constants/theme";
 import { useAppTheme } from "@/hooks/useAppTheme";
-import { isSupabaseConfigured } from "@/lib/supabase";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authStore";
 import { useFavoritesStore } from "@/store/favoritesStore";
 
@@ -47,10 +47,30 @@ export default function ProfileScreen() {
   const logout = useAuthStore((state) => state.logout);
   const checkSession = useAuthStore((state) => state.checkSession);
   const favorites = useFavoritesStore((state) => state.ids.length);
+  const [orderCount, setOrderCount] = useState(0);
 
   useEffect(() => {
     checkSession();
   }, [checkSession]);
+
+  useEffect(() => {
+    const fetchOrders = async () => {
+      if (!user || !isSupabaseConfigured) {
+        setOrderCount(0);
+        return;
+      }
+      try {
+        const { count } = await supabase
+          .from("orders")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", user.id);
+        setOrderCount(count || 0);
+      } catch (err) {
+        console.log("Failed to fetch order count", err);
+      }
+    };
+    fetchOrders();
+  }, [user]);
 
   const showComingSoon = (label: string) =>
     Toast.show({
@@ -168,12 +188,26 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.statsRow}>
-          <StatCard icon="package-variant" label="Orders" value="3" />
+          <StatCard icon="package-variant" label="Orders" value={`${orderCount}`} />
           <StatCard icon="heart-outline" label="Saved" value={`${favorites}`} />
           <StatCard icon="ticket-percent-outline" label="Coupons" value="2" />
         </View>
 
-        <MenuGroup title="Shopping" items={shoppingLinks} onPress={showComingSoon} />
+        <MenuGroup
+          title="Shopping"
+          items={shoppingLinks}
+          onPress={(label) => {
+            if (label === "My orders") {
+              if (!user) {
+                router.push("/auth");
+                return;
+              }
+              router.push("/orders");
+              return;
+            }
+            showComingSoon(label);
+          }}
+        />
 
         <View
           style={[

@@ -1,16 +1,25 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Tabs } from "expo-router/js-tabs";
-import React from "react";
+import React, { useEffect } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HapticTab } from "@/components/HapticTab";
 import { radius, typography } from "@/constants/theme";
 import { useAppTheme } from "@/hooks/useAppTheme";
 import { cartCount, useCartStore } from "@/store/cartStore";
+import { useAuthStore } from "@/store/authStore";
 
 export default function TabLayout() {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const count = useCartStore((state) => cartCount(state.items));
+  const user = useAuthStore((state) => state.user);
+  const syncFromLocalToSupabase = useCartStore((state) => state.syncFromLocalToSupabase);
+
+  useEffect(() => {
+    if (user?.id) {
+      syncFromLocalToSupabase(user.id);
+    }
+  }, [user?.id, syncFromLocalToSupabase]);
 
   return (
     <Tabs
