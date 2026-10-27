@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -15,13 +15,14 @@ import CommonHeader from "@/components/CommonHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { radius, shadows, space, typography } from "@/constants/theme";
 import { useAppTheme } from "@/hooks/useAppTheme";
+import { addressLines } from "@/lib/addresses";
 import { formatPrice } from "@/lib/format";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { defaultAddress, useAddressStore } from "@/store/addressStore";
 import { useAuthStore } from "@/store/authStore";
 import { cartSubtotal, useCartStore } from "@/store/cartStore";
 
 type DeliveryKey = "standard" | "express";
-type PaymentKey = "card" | "wallet" | "cod";
 
 const deliveryOptions: {
   key: DeliveryKey;
@@ -33,32 +34,6 @@ const deliveryOptions: {
   { key: "express", label: "Express", detail: "1–2 business days", price: 9.99 },
 ];
 
-const paymentOptions: {
-  key: PaymentKey;
-  label: string;
-  detail: string;
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
-}[] = [
-  {
-    key: "card",
-    label: "Card ending 4242",
-    detail: "Visa · expires 09/28",
-    icon: "credit-card-outline",
-  },
-  {
-    key: "wallet",
-    label: "Mobile wallet",
-    detail: "Apple Pay / Google Pay",
-    icon: "wallet-outline",
-  },
-  {
-    key: "cod",
-    label: "Cash on delivery",
-    detail: "Pay when it arrives",
-    icon: "cash-multiple",
-  },
-];
-
 export default function CheckoutScreen() {
   const theme = useAppTheme();
   const router = useRouter();
@@ -66,13 +41,20 @@ export default function CheckoutScreen() {
   const items = useCartStore((state) => state.items);
   const clear = useCartStore((state) => state.clear);
   const user = useAuthStore((state) => state.user);
+  const addresses = useAddressStore((state) => state.addresses);
+  const loadAddresses = useAddressStore((state) => state.load);
   const [delivery, setDelivery] = useState<DeliveryKey>("standard");
-  const [payment, setPayment] = useState<PaymentKey>("card");
   const [placed, setPlaced] = useState(false);
   const [orderNumber, setOrderNumber] = useState(
     () => `SC-${Math.random().toString(36).slice(2, 10).toUpperCase()}`
   );
   const [placing, setPlacing] = useState(false);
+
+  useEffect(() => {
+    if (user) loadAddresses();
+  }, [user, loadAddresses]);
+
+  const selectedAddress = defaultAddress(addresses);
 
   const subtotal = cartSubtotal(items);
   const shipping =
@@ -105,15 +87,32 @@ export default function CheckoutScreen() {
 
     setPlacing(true);
     try {
+      let address = selectedAddress;
+      if (!address) {
+        await loadAddresses(true);
+        address = defaultAddress(useAddressStore.getState().addresses);
+      }
+
+      if (!address) {
+        Toast.show({
+          type: "info",
+          text1: "Add a delivery address",
+          text2: "Save where you want your order delivered.",
+        });
+        router.push("/addresses");
+        return;
+      }
+
       const shippingAddress = {
-        label: "Home",
-        recipient: user.email.split("@")[0],
-        line1: "123 Market Street",
-        city: "San Francisco",
-        state: "CA",
-        postal_code: "94103",
-        country: "US",
-        phone: "+1 (415) 555-0132",
+        label: address.label,
+        recipient: address.recipient,
+        line1: address.line1,
+        line2: address.line2 ?? undefined,
+        city: address.city,
+        state: address.state ?? undefined,
+        postal_code: address.postalCode,
+        country: address.country,
+        phone: address.phone ?? undefined,
       };
 
       const { data: order, error: orderError } = await supabase
@@ -202,6 +201,12 @@ export default function CheckoutScreen() {
             <Text style={[styles.orderValue, { color: theme.colors.text }]}>
               {delivery === "express" ? "1–2 business days" : "3–5 business days"}
             </Text>
+            <Text style={[styles.orderLabel, { color: theme.colors.textMuted }]}>
+              Payment
+            </Text>
+            <Text style={[styles.orderValue, { color: theme.colors.text }]}>
+              Cash on delivery
+            </Text>
           </View>
           <Button
             title="Continue shopping"
@@ -210,7 +215,7 @@ export default function CheckoutScreen() {
           />
           <Button
             title="View orders"
-            onPress={() => router.replace("/(tabs)/profile")}
+            onPress={() => router.replace("/orders")}
             variant="ghost"
             fullWidth
           />
@@ -245,7 +250,7 @@ export default function CheckoutScreen() {
         ]}
       >
         <View style={styles.steps}>
-          {["Cart", "Details", "Payment"].map((step, index) => (
+          {["Cart", "Details", "Confirm"].map((step, index) => (
             <React.Fragment key={step}>
               {index > 0 ? (
                 <View style={[styles.stepLine, { backgroundColor: theme.colors.border }]} />
@@ -365,45 +370,99 @@ export default function CheckoutScreen() {
             </Text>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Change delivery address"
-              hitSlop={8}
-              onPress={() =>
-                Toast.show({
-                  type: "info",
-                  text1: "Address book",
-                  text2: "Saved addresses will connect to Supabase.",
-                })
+              accessibilityLabel={
+                selectedAddress ? "Change delivery address" : "Add delivery address"
               }
+              hitSlop={8}
+              onPress={() => router.push(user ? "/addresses" : "/auth")}
             >
               <Text style={[styles.change, { color: theme.colors.brand }]}>
-                Change
+                {user ? (selectedAddress ? "Change" : "Add") : "Sign in"}
               </Text>
             </Pressable>
           </View>
-          <View style={styles.addressRow}>
-            <View
-              style={[styles.addressIcon, { backgroundColor: theme.colors.surfaceMuted }]}
-            >
-              <MaterialCommunityIcons
-                name="map-marker-outline"
-                size={20}
-                color={theme.colors.textSecondary}
-              />
-            </View>
-            <View style={styles.addressCopy}>
-              <Text style={[styles.optionLabel, { color: theme.colors.text }]}>
-                Alex Morgan
-              </Text>
-              <Text
-                style={[styles.optionDetail, { color: theme.colors.textSecondary }]}
+          {selectedAddress ? (
+            <View style={styles.addressRow}>
+              <View
+                style={[styles.addressIcon, { backgroundColor: theme.colors.surfaceMuted }]}
               >
-                123 Market Street, San Francisco, CA 94103
-              </Text>
-              <Text style={[styles.optionDetail, { color: theme.colors.textMuted }]}>
-                +1 (415) 555-0132
-              </Text>
+                <MaterialCommunityIcons
+                  name="map-marker-outline"
+                  size={20}
+                  color={theme.colors.textSecondary}
+                />
+              </View>
+              <View style={styles.addressCopy}>
+                <Text style={[styles.optionLabel, { color: theme.colors.text }]}>
+                  {selectedAddress.recipient}
+                </Text>
+                {addressLines(selectedAddress).map((line, index) => (
+                  <Text
+                    key={`${index}-${line}`}
+                    style={[
+                      styles.optionDetail,
+                      { color: theme.colors.textSecondary },
+                    ]}
+                  >
+                    {line}
+                  </Text>
+                ))}
+                {selectedAddress.phone ? (
+                  <Text
+                    style={[
+                      styles.optionDetail,
+                      { color: theme.colors.textMuted },
+                    ]}
+                  >
+                    {selectedAddress.phone}
+                  </Text>
+                ) : null}
+              </View>
             </View>
-          </View>
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add a delivery address"
+              onPress={() => router.push(user ? "/addresses" : "/auth")}
+              style={({ pressed }) => [
+                styles.emptyAddress,
+                {
+                  borderColor: theme.colors.border,
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <View
+                style={[styles.addressIcon, { backgroundColor: theme.colors.brandSoft }]}
+              >
+                <MaterialCommunityIcons
+                  name="map-marker-plus-outline"
+                  size={20}
+                  color={theme.colors.brand}
+                />
+              </View>
+              <View style={styles.addressCopy}>
+                <Text style={[styles.optionLabel, { color: theme.colors.text }]}>
+                  {user ? "Add a delivery address" : "Sign in to add an address"}
+                </Text>
+                <Text
+                  style={[
+                    styles.optionDetail,
+                    { color: theme.colors.textMuted },
+                  ]}
+                >
+                  {user
+                    ? "Save an address for faster checkout."
+                    : "Your saved addresses will appear here."}
+                </Text>
+              </View>
+              <MaterialCommunityIcons
+                name="chevron-right"
+                size={20}
+                color={theme.colors.textMuted}
+              />
+            </Pressable>
+          )}
         </View>
 
         <View
@@ -420,54 +479,45 @@ export default function CheckoutScreen() {
               Payment
             </Text>
             <MaterialCommunityIcons
-              name="lock-outline"
-              size={18}
+              name="cash-multiple"
+              size={20}
               color={theme.colors.success}
             />
           </View>
-          {paymentOptions.map((option) => {
-            const selected = payment === option.key;
-            return (
-              <Pressable
-                key={option.key}
-                accessibilityRole="radio"
-                accessibilityState={{ selected }}
-                onPress={() => setPayment(option.key)}
-                style={[
-                  styles.option,
-                  {
-                    borderColor: selected
-                      ? theme.colors.brand
-                      : theme.colors.border,
-                    backgroundColor: selected
-                      ? theme.colors.brandSoft
-                      : "transparent",
-                  },
-                ]}
+          <View
+            style={[
+              styles.option,
+              {
+                borderColor: theme.colors.brand,
+                backgroundColor: theme.colors.brandSoft,
+              },
+            ]}
+          >
+            <MaterialCommunityIcons
+              name="cash-multiple"
+              size={20}
+              color={theme.colors.brand}
+            />
+            <View style={styles.optionCopy}>
+              <Text style={[styles.optionLabel, { color: theme.colors.text }]}>
+                Cash on delivery
+              </Text>
+              <Text
+                style={[styles.optionDetail, { color: theme.colors.textMuted }]}
               >
-                <MaterialCommunityIcons
-                  name={option.icon}
-                  size={20}
-                  color={selected ? theme.colors.brand : theme.colors.textMuted}
-                />
-                <View style={styles.optionCopy}>
-                  <Text style={[styles.optionLabel, { color: theme.colors.text }]}>
-                    {option.label}
-                  </Text>
-                  <Text
-                    style={[styles.optionDetail, { color: theme.colors.textMuted }]}
-                  >
-                    {option.detail}
-                  </Text>
-                </View>
-                <MaterialCommunityIcons
-                  name={selected ? "radiobox-marked" : "radiobox-blank"}
-                  size={20}
-                  color={selected ? theme.colors.brand : theme.colors.textMuted}
-                />
-              </Pressable>
-            );
-          })}
+                Pay the courier in cash when your order arrives.
+              </Text>
+            </View>
+            <MaterialCommunityIcons
+              name="check-circle"
+              size={20}
+              color={theme.colors.brand}
+            />
+          </View>
+          <Text style={[styles.optionDetail, { color: theme.colors.textMuted }]}>
+            Online card and wallet payments are not available. No payment is
+            taken until delivery.
+          </Text>
         </View>
 
         <View
@@ -534,9 +584,9 @@ export default function CheckoutScreen() {
           </Text>
         </View>
         <Button
-          title={placing ? "Placing order..." : "Place order"}
+          title={placing ? "Placing order..." : "Place COD order"}
           onPress={placeOrder}
-          icon={placing ? undefined : "lock-outline"}
+          icon={placing ? undefined : "check-circle-outline"}
           disabled={placing}
           style={styles.placeButton}
         />
@@ -631,6 +681,14 @@ const styles = StyleSheet.create({
   addressRow: {
     flexDirection: "row",
     gap: space[4],
+  },
+  emptyAddress: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space[4],
+    padding: space[4],
+    borderRadius: radius.sm,
+    borderWidth: 1,
   },
   addressIcon: {
     width: 40,

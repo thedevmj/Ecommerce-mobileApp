@@ -36,6 +36,7 @@ type Order = {
   discount: number;
   total: number;
   placed_at: string;
+  payment_method?: string | null;
   order_items: OrderItem[];
 };
 
@@ -56,28 +57,24 @@ export default function OrdersScreen() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const fetchOrders = useCallback(async () => {
     if (!user || !isSupabaseConfigured) {
       setOrders([]);
+      setLoadError(null);
       setLoading(false);
       setRefreshing(false);
       return;
     }
 
     try {
+      setLoadError(null);
       const { data, error } = await supabase
         .from("orders")
         .select(
           `
-          id,
-          order_number,
-          status,
-          subtotal,
-          shipping,
-          discount,
-          total,
-          placed_at,
+          *,
           order_items (
             id,
             quantity,
@@ -92,8 +89,9 @@ export default function OrdersScreen() {
 
       if (error) throw error;
       setOrders((data as Order[]) || []);
-    } catch (err) {
+    } catch (err: any) {
       console.log("Failed to fetch orders", err);
+      setLoadError(err?.message || "Please try again.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -156,6 +154,24 @@ export default function OrdersScreen() {
     );
   }
 
+  if (loadError) {
+    return (
+      <View style={[styles.wrapper, { backgroundColor: theme.colors.background }]}>
+        <CommonHeader title="My orders" />
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Couldn't load orders"
+          message={loadError}
+          actionLabel="Try again"
+          onAction={() => {
+            setLoading(true);
+            fetchOrders();
+          }}
+        />
+      </View>
+    );
+  }
+
   if (orders.length === 0) {
     return (
       <View style={[styles.wrapper, { backgroundColor: theme.colors.background }]}>
@@ -210,6 +226,7 @@ export default function OrdersScreen() {
                   </Text>
                   <Text style={[styles.orderDate, { color: theme.colors.textMuted }]}>
                     {formatDate(item.placed_at)}
+                    {" · Cash on delivery"}
                   </Text>
                 </View>
                 <View

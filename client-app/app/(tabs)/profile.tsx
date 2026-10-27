@@ -27,8 +27,7 @@ type MenuItem = {
 
 const shoppingLinks: MenuItem[] = [
   { icon: "package-variant-closed", label: "My orders", hint: "Track and reorder" },
-  { icon: "map-marker-outline", label: "Addresses", hint: "2 saved" },
-  { icon: "credit-card-outline", label: "Payment methods" },
+  { icon: "map-marker-outline", label: "Addresses", hint: "Delivery addresses" },
   { icon: "ticket-percent-outline", label: "Coupons & offers" },
 ];
 
@@ -203,6 +202,14 @@ export default function ProfileScreen() {
                 return;
               }
               router.push("/orders");
+              return;
+            }
+            if (label === "Addresses") {
+              if (!user) {
+                router.push("/auth");
+                return;
+              }
+              router.push("/addresses");
               return;
             }
             showComingSoon(label);

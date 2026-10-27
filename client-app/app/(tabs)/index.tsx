@@ -54,7 +54,7 @@ const categoryIcons: Record<
 
 const trustItems = [
   { icon: "truck-fast-outline", label: "Free shipping" },
-  { icon: "shield-check-outline", label: "Secure payment" },
+  { icon: "cash-multiple", label: "Cash on delivery" },
   { icon: "backup-restore", label: "30-day returns" },
 ] as const;
 

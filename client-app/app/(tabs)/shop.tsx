@@ -1,5 +1,6 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FlatList,
   Pressable,
@@ -9,33 +10,41 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import FilterSheet from "@/components/FilterSheet";
 import ProductCard from "@/components/ProductCard";
 import { Chip } from "@/components/ui/Chip";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { FilterChip } from "@/components/ui/FilterChip";
 import { IconButton } from "@/components/ui/IconButton";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { radius, space, typography } from "@/constants/theme";
 import { useAppTheme } from "@/hooks/useAppTheme";
 import { formatCategory } from "@/lib/format";
+import {
+  DEFAULT_FILTERS,
+  DEFAULT_SORT,
+  ShopFilters,
+  SortKey,
+  activeFilterCount,
+  countResults as countMatchingResults,
+  getActiveFilters,
+  getBrands,
+  getPriceBounds,
+  getPricePresets,
+  selectProducts,
+} from "@/lib/shopFilters";
 import { cartCount, useCartStore } from "@/store/cartStore";
 import { useProductsStore } from "@/store/productStore";
-
-type SortKey = "featured" | "price-asc" | "price-desc" | "rating";
-
-const sortOptions: { key: SortKey; label: string }[] = [
-  { key: "featured", label: "Featured" },
-  { key: "price-asc", label: "Price: low" },
-  { key: "price-desc", label: "Price: high" },
-  { key: "rating", label: "Top rated" },
-];
 
 export default function ShopScreen() {
   const theme = useAppTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ category?: string }>();
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<SortKey>("featured");
+  const [sort, setSort] = useState<SortKey>(DEFAULT_SORT);
+  const [filters, setFilters] = useState<ShopFilters>(DEFAULT_FILTERS);
+  const [filtersVisible, setFiltersVisible] = useState(false);
   const category = params.category ?? "all";
   const setCategory = (value: string) => router.setParams({ category: value });
   const { products, categories, loading, fetchProducts, fetchCategories } =
@@ -47,31 +56,30 @@ export default function ShopScreen() {
     if (categories.length === 0) fetchCategories();
   }, [products.length, categories.length, fetchProducts, fetchCategories]);
 
-  const results = useMemo(() => {
-    const search = query.trim().toLowerCase();
-    const filtered = products.filter((product) => {
-      const matchesCategory =
-        category === "all" || product.category === category;
-      const matchesSearch =
-        search.length === 0 ||
-        product.title.toLowerCase().includes(search) ||
-        product.category.toLowerCase().includes(search) ||
-        (product.brand ?? "").toLowerCase().includes(search);
+  const brands = useMemo(() => getBrands(products), [products]);
+  const bounds = useMemo(() => getPriceBounds(products), [products]);
+  const presets = useMemo(() => getPricePresets(bounds), [bounds]);
 
-      return matchesCategory && matchesSearch;
-    });
+  const results = useMemo(
+    () => selectProducts(products, { query, category, filters, sort }),
+    [products, query, category, filters, sort]
+  );
 
-    switch (sort) {
-      case "price-asc":
-        return [...filtered].sort((a, b) => a.price - b.price);
-      case "price-desc":
-        return [...filtered].sort((a, b) => b.price - a.price);
-      case "rating":
-        return [...filtered].sort((a, b) => b.rating.rate - a.rating.rate);
-      default:
-        return filtered;
-    }
-  }, [products, query, category, sort]);
+  const activeFilters = useMemo(() => getActiveFilters(filters), [filters]);
+  const filterCount = activeFilterCount(filters);
+
+  const countForFilters = useCallback(
+    (draft: ShopFilters) =>
+      countMatchingResults(products, { query, category, filters: draft }),
+    [products, query, category]
+  );
+
+  const resetAll = () => {
+    setQuery("");
+    setCategory("all");
+    setSort(DEFAULT_SORT);
+    setFilters(DEFAULT_FILTERS);
+  };
 
   const isLoading = loading && products.length === 0;
 
@@ -126,46 +134,98 @@ export default function ShopScreen() {
         ))}
       </ScrollView>
 
-      <View style={styles.sortRow}>
+      <View style={styles.controlsRow}>
         <Text style={[styles.resultCount, { color: theme.colors.textSecondary }]}>
           {results.length} {results.length === 1 ? "result" : "results"}
         </Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.sortChips}>
-            {sortOptions.map((option) => (
-              <Pressable
-                key={option.key}
-                accessibilityRole="button"
-                accessibilityState={{ selected: sort === option.key }}
-                onPress={() => setSort(option.key)}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            filterCount > 0
+              ? `Filter and sort, ${filterCount} filters active`
+              : "Filter and sort"
+          }
+          accessibilityState={{ expanded: filtersVisible }}
+          onPress={() => setFiltersVisible(true)}
+          style={({ pressed }) => [
+            styles.filterButton,
+            {
+              backgroundColor:
+                filterCount > 0 ? theme.colors.brandSoft : theme.colors.surface,
+              borderColor:
+                filterCount > 0 ? theme.colors.brand : theme.colors.border,
+              opacity: pressed ? 0.75 : 1,
+            },
+          ]}
+        >
+          <MaterialCommunityIcons
+            name="tune-variant"
+            size={16}
+            color={filterCount > 0 ? theme.colors.brand : theme.colors.text}
+          />
+          <Text
+            style={[
+              styles.filterButtonLabel,
+              {
+                color:
+                  filterCount > 0 ? theme.colors.brand : theme.colors.text,
+              },
+            ]}
+          >
+            Filter & Sort
+          </Text>
+          {filterCount > 0 ? (
+            <View
+              style={[
+                styles.filterBadge,
+                { backgroundColor: theme.colors.brand },
+              ]}
+            >
+              <Text
                 style={[
-                  styles.sortChip,
-                  {
-                    backgroundColor:
-                      sort === option.key
-                        ? theme.colors.text
-                        : theme.colors.surfaceMuted,
-                  },
+                  styles.filterBadgeText,
+                  { color: theme.colors.onBrand },
                 ]}
               >
-                <Text
-                  style={[
-                    styles.sortLabel,
-                    {
-                      color:
-                        sort === option.key
-                          ? theme.colors.textInverse
-                          : theme.colors.textSecondary,
-                    },
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </ScrollView>
+                {filterCount}
+              </Text>
+            </View>
+          ) : null}
+        </Pressable>
       </View>
+
+      {activeFilters.length > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.activeChipsRow}
+        >
+          {activeFilters.map((item) => (
+            <FilterChip
+              key={item.key}
+              label={item.label}
+              onRemove={() => setFilters(item.clear)}
+            />
+          ))}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Clear all filters"
+            hitSlop={6}
+            onPress={() => setFilters(DEFAULT_FILTERS)}
+            style={({ pressed }) => [
+              styles.clearAll,
+              {
+                borderColor: theme.colors.border,
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+          >
+            <Text style={[styles.clearAllLabel, { color: theme.colors.textSecondary }]}>
+              Clear all
+            </Text>
+          </Pressable>
+        </ScrollView>
+      ) : null}
     </View>
   );
 
@@ -201,17 +261,29 @@ export default function ShopScreen() {
             <EmptyState
               icon="magnify-close"
               title="No matches found"
-              message="Try a different search term or clear the category filter."
+              message="Try a different search term or clear a filter."
               actionLabel="Reset filters"
-              onAction={() => {
-                setQuery("");
-                setCategory("all");
-                setSort("featured");
-              }}
+              onAction={resetAll}
             />
           }
         />
       )}
+
+      {filtersVisible ? (
+        <FilterSheet
+          onClose={() => setFiltersVisible(false)}
+          filters={filters}
+          sort={sort}
+          brands={brands}
+          presets={presets}
+          bounds={bounds}
+          countResults={countForFilters}
+          onApply={(nextFilters, nextSort) => {
+            setFilters(nextFilters);
+            setSort(nextSort);
+          }}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -256,25 +328,57 @@ const styles = StyleSheet.create({
     gap: space[3],
     paddingRight: space[3],
   },
-  sortRow: {
-    gap: space[3],
+  controlsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: space[4],
   },
   resultCount: {
     fontFamily: typography.fontFamily.medium,
     fontSize: 12,
   },
-  sortChips: {
+  filterButton: {
+    height: 40,
     flexDirection: "row",
+    alignItems: "center",
     gap: space[2],
-  },
-  sortChip: {
+    paddingHorizontal: space[5],
     borderRadius: radius.pill,
-    paddingHorizontal: space[4],
-    paddingVertical: space[2],
+    borderWidth: 1,
   },
-  sortLabel: {
+  filterButtonLabel: {
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: 13,
+  },
+  filterBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: space[2],
+  },
+  filterBadgeText: {
+    fontFamily: typography.fontFamily.bold,
+    fontSize: 10,
+  },
+  activeChipsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space[3],
+    paddingRight: space[3],
+  },
+  clearAll: {
+    height: 36,
+    justifyContent: "center",
+    paddingHorizontal: space[4],
+    borderRadius: radius.pill,
+    borderWidth: 1,
+  },
+  clearAllLabel: {
     fontFamily: typography.fontFamily.medium,
-    fontSize: 11,
+    fontSize: 13,
   },
   column: {
     gap: space[5],
@@ -291,8 +395,5 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: space[5],
-  },
-  hidden: {
-    display: "none",
   },
 });

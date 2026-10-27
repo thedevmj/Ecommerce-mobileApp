@@ -3,6 +3,8 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   Image,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -71,9 +73,13 @@ export default function CartScreen() {
           onAction={() => router.push("/(tabs)/shop")}
         />
       ) : (
-        <>
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
           <ScrollView
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.scrollContent}
           >
             <View style={styles.summaryRow}>
@@ -298,7 +304,7 @@ export default function CartScreen() {
               style={styles.checkoutButton}
             />
           </View>
-        </>
+        </KeyboardAvoidingView>
       )}
     </View>
   );
@@ -335,6 +341,9 @@ function SummaryRow({
 
 const styles = StyleSheet.create({
   wrapper: {
+    flex: 1,
+  },
+  flex: {
     flex: 1,
   },
   scrollContent: {

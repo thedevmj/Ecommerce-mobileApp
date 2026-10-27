@@ -9,6 +9,7 @@ interface RatingProps {
   count?: number;
   size?: number;
   showCount?: boolean;
+  showRate?: boolean;
 }
 
 export function Rating({
@@ -16,6 +17,7 @@ export function Rating({
   count,
   size = 13,
   showCount = true,
+  showRate = true,
 }: RatingProps) {
   const theme = useAppTheme();
   const rounded = Math.round(rate);
@@ -35,9 +37,11 @@ export function Rating({
           color={theme.colors.warning}
         />
       ))}
-      <Text style={[styles.rate, { color: theme.colors.textSecondary }]}>
-        {rate.toFixed(1)}
-      </Text>
+      {showRate ? (
+        <Text style={[styles.rate, { color: theme.colors.textSecondary }]}>
+          {rate.toFixed(1)}
+        </Text>
+      ) : null}
       {showCount && count ? (
         <Text style={[styles.count, { color: theme.colors.textMuted }]}>
           ({count})

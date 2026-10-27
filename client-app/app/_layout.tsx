@@ -10,9 +10,11 @@ import {
   ThemeProvider,
 } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useEffect } from "react";
 import Toast from "react-native-toast-message";
 import { darkTheme, lightTheme } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/useColorScheme";
+import { useAuthStore } from "@/store/authStore";
 
 export default function RootLayout() {
   const [loaded] = useFonts({
@@ -25,6 +27,11 @@ export default function RootLayout() {
   const scheme = useColorScheme() ?? "light";
   const theme = scheme === "dark" ? darkTheme : lightTheme;
   const baseTheme = scheme === "dark" ? DarkTheme : DefaultTheme;
+  const checkSession = useAuthStore((state) => state.checkSession);
+
+  useEffect(() => {
+    checkSession();
+  }, [checkSession]);
 
   if (!loaded) {
     return null;
@@ -55,6 +62,9 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="product/[id]" />
         <Stack.Screen name="checkout" />
+        <Stack.Screen name="orders" />
+        <Stack.Screen name="addresses" />
+        <Stack.Screen name="address-form" />
         <Stack.Screen name="auth" options={{ presentation: "modal" }} />
         <Stack.Screen name="+not-found" />
       </Stack>

@@ -1,11 +1,13 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   Image,
+  KeyboardAvoidingView,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,6 +20,7 @@ import Toast from "react-native-toast-message";
 import Button from "@/components/Button";
 import CommonHeader from "@/components/CommonHeader";
 import ProductCard from "@/components/ProductCard";
+import ProductReviews from "@/components/ProductReviews";
 import { Badge } from "@/components/ui/Badge";
 import { QuantityStepper } from "@/components/ui/QuantityStepper";
 import { Rating } from "@/components/ui/Rating";
@@ -54,6 +57,12 @@ export default function ProductScreen() {
   const fetchProducts = useProductsStore((state) => state.fetchProducts);
 
   const isFavorite = product ? favoriteIds.includes(product.id) : false;
+
+  const refreshProduct = useCallback(() => {
+    getProduct(String(id))
+      .then((fresh) => setProduct(fresh))
+      .catch(() => undefined);
+  }, [id]);
 
   useEffect(() => {
     let active = true;
@@ -168,13 +177,18 @@ export default function ProductScreen() {
         isFav={isFavorite}
         handleToggleFavorite={() => toggleFavorite(product.id)}
       />
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: 110 + insets.bottom },
-        ]}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: 110 + insets.bottom },
+          ]}
+        >
         <View
           style={[
             styles.gallery,
@@ -334,6 +348,11 @@ export default function ProductScreen() {
           </View>
         </View>
 
+        <ProductReviews
+          productId={product.id}
+          onReviewSubmitted={refreshProduct}
+        />
+
         {related.length > 0 ? (
           <View style={styles.section}>
             <SectionHeader
@@ -356,10 +375,10 @@ export default function ProductScreen() {
             />
           </View>
         ) : null}
-      </ScrollView>
+        </ScrollView>
 
-      <SafeAreaView
-        edges={["bottom"]}
+        <SafeAreaView
+          edges={["bottom"]}
         style={[
           styles.bottomBar,
           {
@@ -402,13 +421,17 @@ export default function ProductScreen() {
             color={theme.colors.textInverse}
           />
         </Pressable>
-      </SafeAreaView>
+        </SafeAreaView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrapper: {
+    flex: 1,
+  },
+  flex: {
     flex: 1,
   },
   content: {
