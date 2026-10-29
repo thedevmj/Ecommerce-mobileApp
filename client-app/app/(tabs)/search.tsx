@@ -1,6 +1,12 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   FlatList,
   Pressable,
@@ -19,6 +25,7 @@ import { radius, space, typography } from "@/constants/theme";
 import { useAppTheme } from "@/hooks/useAppTheme";
 import { formatCategory } from "@/lib/format";
 import { useProductsStore } from "@/store/productStore";
+import { Product } from "@/type";
 
 const trending = [
   "smartphones",
@@ -33,28 +40,45 @@ export default function SearchScreen() {
   const theme = useAppTheme();
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const { products, categories, fetchProducts, fetchCategories } =
-    useProductsStore();
+  const deferredQuery = useDeferredValue(query);
+  const products = useProductsStore((state) => state.products);
+  const categories = useProductsStore((state) => state.categories);
+  const fetchProducts = useProductsStore((state) => state.fetchProducts);
+  const fetchCategories = useProductsStore((state) => state.fetchCategories);
 
   useEffect(() => {
     if (products.length === 0) fetchProducts();
     if (categories.length === 0) fetchCategories();
   }, [products.length, categories.length, fetchProducts, fetchCategories]);
 
+  const searchIndex = useMemo(
+    () =>
+      products.map((product) => ({
+        product,
+        text: `${product.title} ${product.category} ${product.brand ?? ""}`.toLowerCase(),
+      })),
+    [products]
+  );
+
   const results = useMemo(() => {
-    const search = query.trim().toLowerCase();
+    const search = deferredQuery.trim().toLowerCase();
     if (search.length < 2) return [];
 
-    return products.filter((product) => {
-      return (
-        product.title.toLowerCase().includes(search) ||
-        product.category.toLowerCase().includes(search) ||
-        (product.brand ?? "").toLowerCase().includes(search)
-      );
-    });
-  }, [products, query]);
+    return searchIndex
+      .filter((entry) => entry.text.includes(search))
+      .map((entry) => entry.product);
+  }, [deferredQuery, searchIndex]);
 
   const searchActive = query.trim().length >= 2;
+
+  const renderItem = useCallback(
+    ({ item }: { item: Product }) => (
+      <View style={styles.cardWrap}>
+        <ProductCard product={item} />
+      </View>
+    ),
+    []
+  );
 
   const handleBack = () => {
     if (router.canGoBack()) router.back();
@@ -176,11 +200,10 @@ export default function SearchScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        renderItem={({ item }) => (
-          <View style={styles.cardWrap}>
-            <ProductCard product={item} />
-          </View>
-        )}
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        windowSize={5}
+        renderItem={renderItem}
         ListEmptyComponent={
           searchActive ? (
             <EmptyState

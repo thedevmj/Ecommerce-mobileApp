@@ -1,8 +1,9 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
-  Image,
+  GestureResponderEvent,
   Pressable,
   StyleProp,
   StyleSheet,
@@ -15,7 +16,7 @@ import { radius, shadows, space, typography } from "@/constants/theme";
 import { useAppTheme } from "@/hooks/useAppTheme";
 import { formatCategory } from "@/lib/format";
 import { useCartStore } from "@/store/cartStore";
-import { useFavoritesStore } from "@/store/favoritesStore";
+import { isFavoriteId, useFavoritesStore } from "@/store/favoritesStore";
 import { Product } from "@/type";
 import { Price } from "@/components/ui/Price";
 import { Rating } from "@/components/ui/Rating";
@@ -35,17 +36,41 @@ const ProductCard: React.FC<ProductCardProps> = ({
   const router = useRouter();
   const theme = useAppTheme();
   const addItem = useCartStore((state) => state.addItem);
-  const favoriteIds = useFavoritesStore((state) => state.ids);
+  const isFavorite = useFavoritesStore((state) =>
+    isFavoriteId(state.ids, id)
+  );
   const toggleFavorite = useFavoritesStore((state) => state.toggle);
-  const isFavorite = favoriteIds.includes(id);
 
-  const handleAddToCart = () => {
+  const handleAddToCart = (event: GestureResponderEvent) => {
+    event.stopPropagation();
     addItem(product);
     Toast.show({
       type: "success",
       text1: "Added to cart",
       text2: title,
       visibilityTime: 1800,
+    });
+  };
+
+  const handleToggleFavorite = async (event: GestureResponderEvent) => {
+    event.stopPropagation();
+    const result = await toggleFavorite(id);
+
+    if (result.error) {
+      Toast.show({
+        type: "error",
+        text1: "Could not update favorites",
+        text2: result.error,
+        visibilityTime: 2200,
+      });
+      return;
+    }
+
+    Toast.show({
+      type: "success",
+      text1: result.favorite ? "Saved to favorites" : "Removed from favorites",
+      text2: title,
+      visibilityTime: 1500,
     });
   };
 
@@ -75,7 +100,9 @@ const ProductCard: React.FC<ProductCardProps> = ({
         <Image
           source={{ uri: image }}
           style={styles.image}
-          resizeMode="contain"
+          contentFit="contain"
+          cachePolicy="memory-disk"
+          transition={150}
         />
         <Pressable
           accessibilityRole="button"
@@ -84,7 +111,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
           }
           accessibilityState={{ selected: isFavorite }}
           hitSlop={6}
-          onPress={() => toggleFavorite(id)}
+          onPress={handleToggleFavorite}
           style={[
             styles.favorite,
             {
@@ -131,7 +158,9 @@ const ProductCard: React.FC<ProductCardProps> = ({
         ) : null}
 
         <View style={styles.footer}>
-          <Price price={price} compareAtPrice={compact ? undefined : compareAtPrice} size={compact ? "small" : "medium"} />
+          <View style={styles.priceWrap}>
+            <Price price={price} compareAtPrice={compact ? undefined : compareAtPrice} size={compact ? "small" : "medium"} />
+          </View>
           {!compact ? (
             <Pressable
               accessibilityRole="button"
@@ -159,7 +188,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
   );
 };
 
-export default ProductCard;
+export default React.memo(ProductCard);
 
 const styles = StyleSheet.create({
   card: {
@@ -227,11 +256,17 @@ const styles = StyleSheet.create({
     marginTop: space[3],
     gap: space[3],
   },
+  priceWrap: {
+    flex: 1,
+    minWidth: 0,
+    marginRight: space[2],
+  },
   addButton: {
     width: 34,
     height: 34,
     borderRadius: radius.sm,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
 });

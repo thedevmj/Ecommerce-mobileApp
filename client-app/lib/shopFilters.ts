@@ -183,13 +183,15 @@ export function getActiveFilters(filters: ShopFilters): ActiveFilter[] {
 function matchesQuery(product: Product, { query, category, filters }: ShopQuery) {
   const search = query.trim().toLowerCase();
   const brand = brandOf(product);
+  const title = product.title?.toLowerCase() ?? "";
+  const productCategory = product.category?.toLowerCase() ?? "";
 
   const matchesCategory = category === "all" || product.category === category;
 
   const matchesSearch =
     search.length === 0 ||
-    product.title.toLowerCase().includes(search) ||
-    product.category.toLowerCase().includes(search) ||
+    title.includes(search) ||
+    productCategory.includes(search) ||
     brand.toLowerCase().includes(search);
 
   const matchesPrice =

@@ -3,30 +3,18 @@ import { redirect } from "next/navigation";
 import SignOutButton from "@/components/SignOutButton";
 import { MobileNav, Sidebar } from "@/components/Sidebar";
 import Unauthorized from "@/components/Unauthorized";
-import { createClient } from "@/lib/supabase/server";
+import { getAdminIdentity } from "@/lib/admin";
 
 export default async function DashboardLayout({
   children,
 }: {
   children: ReactNode;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, profile, error, roleColumnMissing } = await getAdminIdentity();
 
   if (!user) {
     redirect("/login");
   }
-
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("role, full_name")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  const roleColumnMissing =
-    error?.code === "42703" || Boolean(error?.message.includes("role"));
 
   if (!profile || profile.role !== "admin") {
     return (
@@ -34,7 +22,7 @@ export default async function DashboardLayout({
         email={user.email ?? "Unknown account"}
         userId={user.id}
         roleReady={!roleColumnMissing}
-        detail={error?.message}
+        detail={error ?? undefined}
       />
     );
   }

@@ -25,7 +25,9 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
 function formatDate(value: string | null | undefined) {
   if (!value) return "Not available";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Not available" : dateFormatter.format(date);
+  return Number.isNaN(date.getTime())
+    ? "Not available"
+    : dateFormatter.format(date);
 }
 
 export default async function AccountPage() {
@@ -35,12 +37,7 @@ export default async function AccountPage() {
     redirect("/login");
   }
 
-  const { supabase, user } = session;
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("full_name, phone")
-    .eq("id", user.id)
-    .maybeSingle();
+  const { user, profile } = session;
 
   return (
     <div className="space-y-6">
@@ -49,15 +46,6 @@ export default async function AccountPage() {
         title="Account"
         description="Manage the admin login details used for access, contact, and password recovery."
       />
-
-      {profileError ? (
-        <p
-          role="alert"
-          className="rounded-xl border border-danger/20 bg-danger-soft px-4 py-3 text-sm text-danger"
-        >
-          Could not load your saved profile: {profileError.message}
-        </p>
-      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <section className="rounded-3xl border border-line bg-panel p-5 shadow-sm sm:p-6">

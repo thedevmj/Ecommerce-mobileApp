@@ -1,16 +1,16 @@
 import { darkTheme, lightTheme, palette } from "./theme";
 
 const AppColors = {
-  primary: palette.blue,
-  accent: palette.orange,
-  gray: palette.slate,
+  primary: palette.red,
+  accent: palette.olive,
+  gray: palette.ink,
   success: lightTheme.colors.success,
   error: lightTheme.colors.error,
   warning: lightTheme.colors.warning,
   background: {
     primary: lightTheme.colors.background,
     secondary: lightTheme.colors.surfaceMuted,
-    tertiary: palette.slate[200],
+    tertiary: palette.ink[200],
   },
   text: {
     primary: lightTheme.colors.text,

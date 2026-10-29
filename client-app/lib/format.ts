@@ -1,8 +1,9 @@
-export const formatPrice = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(value);
+const currencyFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+});
+
+export const formatPrice = (value: number) => currencyFormatter.format(value);
 
 export const formatCategory = (value: string) =>
   value

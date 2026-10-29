@@ -53,11 +53,19 @@ export type ReviewWithProduct = {
   products?: { title: string; slug: string } | null;
 };
 
+const moneyFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+});
+
+const catalogDateFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+});
+
 export function formatMoney(value: number | string | null | undefined) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(Number(value ?? 0));
+  return moneyFormatter.format(Number(value ?? 0));
 }
 
 export function formatCatalogDate(value: string) {
@@ -65,11 +73,7 @@ export function formatCatalogDate(value: string) {
 
   if (Number.isNaN(date.getTime())) return "";
 
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return catalogDateFormatter.format(date);
 }
 
 export function slugify(value: string) {

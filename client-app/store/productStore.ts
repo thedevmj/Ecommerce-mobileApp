@@ -6,7 +6,6 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 interface ProductsState {
   products: Product[];
-  filteredProducts: Product[];
   categories: string[];
   loading: boolean;
   error: string | null;
@@ -16,42 +15,66 @@ interface ProductsState {
   fetchCategories: () => Promise<void>;
 }
 
+let productsRequest: Promise<void> | null = null;
+let categoriesRequest: Promise<void> | null = null;
+let pendingRequests = 0;
+
 export const useProductsStore = create<ProductsState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       products: [],
-      filteredProducts: [],
       categories: [],
       loading: false,
       error: null,
 
-      fetchProducts: async () => {
-        try {
-          set({ loading: true, error: null });
-          const products = await getProducts();
+      fetchProducts: () => {
+        if (productsRequest) return productsRequest;
 
-          set({
-            products,
-            filteredProducts: products,
-            loading: false,
-          });
-        } catch (error: any) {
-          set({ error: error.message, loading: false });
-        }
-      },
-      fetchCategories: async () => {
-        try {
+        productsRequest = (async () => {
+          pendingRequests += 1;
           set({ loading: true, error: null });
-          const categories = await getCategories();
-          set({ categories, loading: false });
-        } catch (error: any) {
-          set({ error: error.message, loading: false });
-        }
+          try {
+            const products = await getProducts({ page: 1, limit: 100 });
+            set({ products });
+          } catch (error: any) {
+            set({ error: error.message });
+          } finally {
+            pendingRequests = Math.max(0, pendingRequests - 1);
+            set({ loading: pendingRequests > 0 });
+            productsRequest = null;
+          }
+        })();
+
+        return productsRequest;
+      },
+      fetchCategories: () => {
+        if (categoriesRequest) return categoriesRequest;
+
+        categoriesRequest = (async () => {
+          pendingRequests += 1;
+          set({ loading: true, error: null });
+          try {
+            const categories = await getCategories();
+            set({ categories });
+          } catch (error: any) {
+            set({ error: error.message });
+          } finally {
+            pendingRequests = Math.max(0, pendingRequests - 1);
+            set({ loading: pendingRequests > 0 });
+            categoriesRequest = null;
+          }
+        })();
+
+        return categoriesRequest;
       },
     }),
     {
       name: "products-storage",
       storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        products: state.products,
+        categories: state.categories,
+      }),
     }
   )
 );

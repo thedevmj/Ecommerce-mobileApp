@@ -71,30 +71,27 @@ export default function ProductGalleryField({
 
     setUploading(true);
     setError(null);
-    const added: string[] = [];
-    let failure: string | null = null;
-
-    for (const file of Array.from(files)) {
-      if (urls.length + added.length >= MAX_IMAGES) {
-        failure = `Galleries can contain up to ${MAX_IMAGES} images.`;
-        break;
-      }
-
-      const result = await uploadCatalogImage(file, "products");
-
-      if (result.ok) {
-        added.push(result.url);
-      } else {
-        failure = result.error;
-        break;
-      }
-    }
+    const available = Math.max(0, MAX_IMAGES - urls.length);
+    const selected = Array.from(files);
+    const results = await Promise.all(
+      selected
+        .slice(0, available)
+        .map((file) => uploadCatalogImage(file, "products"))
+    );
+    const added = results.flatMap((result) => (result.ok ? [result.url] : []));
+    const failed = results.find((result) => !result.ok);
 
     if (added.length) {
       setUrls((current) => [...current, ...added].slice(0, MAX_IMAGES));
     }
 
-    if (failure) setError(failure);
+    setError(
+      selected.length > available
+        ? `Galleries can contain up to ${MAX_IMAGES} images.`
+        : failed && !failed.ok
+          ? failed.error
+          : null
+    );
     setUploading(false);
   }
 

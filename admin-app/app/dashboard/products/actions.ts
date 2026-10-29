@@ -130,21 +130,22 @@ export async function createProduct(
   if ("error" in parsed) return { error: parsed.error };
 
   const input = parsed.data;
-  const { data: category, error: categoryError } = await session.supabase
-    .from("categories")
-    .select("id")
-    .eq("id", input.category_id)
-    .maybeSingle();
+  const [{ data: category, error: categoryError }, { data: existing, error: slugError }] =
+    await Promise.all([
+      session.supabase
+        .from("categories")
+        .select("id")
+        .eq("id", input.category_id)
+        .maybeSingle(),
+      session.supabase
+        .from("products")
+        .select("id")
+        .eq("slug", input.slug)
+        .maybeSingle(),
+    ]);
 
   if (categoryError) return { error: categoryError.message };
   if (!category) return { error: "That category no longer exists." };
-
-  const { data: existing, error: slugError } = await session.supabase
-    .from("products")
-    .select("id")
-    .eq("slug", input.slug)
-    .maybeSingle();
-
   if (slugError) return { error: slugError.message };
   if (existing) return { error: "That slug is already used by another product." };
 
@@ -189,22 +190,23 @@ export async function updateProduct(
   if ("error" in parsed) return { error: parsed.error };
 
   const input = parsed.data;
-  const { data: category, error: categoryError } = await session.supabase
-    .from("categories")
-    .select("id")
-    .eq("id", input.category_id)
-    .maybeSingle();
+  const [{ data: category, error: categoryError }, { data: existing, error: slugError }] =
+    await Promise.all([
+      session.supabase
+        .from("categories")
+        .select("id")
+        .eq("id", input.category_id)
+        .maybeSingle(),
+      session.supabase
+        .from("products")
+        .select("id")
+        .eq("slug", input.slug)
+        .neq("id", id)
+        .maybeSingle(),
+    ]);
 
   if (categoryError) return { error: categoryError.message };
   if (!category) return { error: "That category no longer exists." };
-
-  const { data: existing, error: slugError } = await session.supabase
-    .from("products")
-    .select("id")
-    .eq("slug", input.slug)
-    .neq("id", id)
-    .maybeSingle();
-
   if (slugError) return { error: slugError.message };
   if (existing) return { error: "That slug is already used by another product." };
 

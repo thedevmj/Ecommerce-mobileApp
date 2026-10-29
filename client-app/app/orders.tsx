@@ -41,13 +41,13 @@ type Order = {
 };
 
 const statusColors: Record<string, { bg: string; text: string }> = {
-  pending: { bg: "#FEF3C7", text: "#92400E" },
-  paid: { bg: "#DBEAFE", text: "#1E40AF" },
-  processing: { bg: "#E0E7FF", text: "#312E81" },
-  shipped: { bg: "#DCFCE7", text: "#166534" },
-  delivered: { bg: "#DCFCE7", text: "#166534" },
-  cancelled: { bg: "#FEE2E2", text: "#991B1B" },
-  refunded: { bg: "#F1F5F9", text: "#475569" },
+  pending: { bg: "#FFF7D1", text: "#806500" },
+  paid: { bg: "#E9F1D6", text: "#56732E" },
+  processing: { bg: "#F5F8EC", text: "#405724" },
+  shipped: { bg: "#E9F1D6", text: "#56732E" },
+  delivered: { bg: "#D8E6BA", text: "#2C3D1A" },
+  cancelled: { bg: "#FFE1DD", text: "#910000" },
+  refunded: { bg: "#EBE6D8", text: "#514A3D" },
 };
 
 export default function OrdersScreen() {

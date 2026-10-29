@@ -10,23 +10,26 @@ import { Platform } from "react-native";
 
 const ExpoSecureStoreAdapter = {
   getItem: (key: string) => {
-    if (Platform.OS === "web") {
+    if (Platform.OS === "web" && typeof localStorage !== "undefined") {
       return localStorage.getItem(key);
     }
+    if (Platform.OS === "web") return null;
     return SecureStore.getItemAsync(key);
   },
   setItem: (key: string, value: string) => {
-    if (Platform.OS === "web") {
+    if (Platform.OS === "web" && typeof localStorage !== "undefined") {
       localStorage.setItem(key, value);
       return;
     }
+    if (Platform.OS === "web") return;
     return SecureStore.setItemAsync(key, value);
   },
   removeItem: (key: string) => {
-    if (Platform.OS === "web") {
+    if (Platform.OS === "web" && typeof localStorage !== "undefined") {
       localStorage.removeItem(key);
       return;
     }
+    if (Platform.OS === "web") return;
     return SecureStore.deleteItemAsync(key);
   },
 };

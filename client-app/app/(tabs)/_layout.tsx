@@ -1,25 +1,38 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Tabs } from "expo-router/js-tabs";
-import React, { useEffect } from "react";
+import React, { useEffect, useSyncExternalStore } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HapticTab } from "@/components/HapticTab";
 import { radius, typography } from "@/constants/theme";
 import { useAppTheme } from "@/hooks/useAppTheme";
 import { cartCount, useCartStore } from "@/store/cartStore";
 import { useAuthStore } from "@/store/authStore";
+import { useFavoritesStore } from "@/store/favoritesStore";
 
 export default function TabLayout() {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const count = useCartStore((state) => cartCount(state.items));
   const user = useAuthStore((state) => state.user);
+  const initialized = useAuthStore((state) => state.initialized);
   const syncFromLocalToSupabase = useCartStore((state) => state.syncFromLocalToSupabase);
+  const syncFavoritesForUser = useFavoritesStore((state) => state.syncForUser);
+  const favoritesHydrated = useSyncExternalStore(
+    useFavoritesStore.persist.onFinishHydration,
+    useFavoritesStore.persist.hasHydrated,
+    useFavoritesStore.persist.hasHydrated
+  );
 
   useEffect(() => {
     if (user?.id) {
       syncFromLocalToSupabase(user.id);
     }
   }, [user?.id, syncFromLocalToSupabase]);
+
+  useEffect(() => {
+    if (!initialized || !favoritesHydrated) return;
+    syncFavoritesForUser(user?.id ?? null);
+  }, [initialized, favoritesHydrated, user?.id, syncFavoritesForUser]);
 
   return (
     <Tabs

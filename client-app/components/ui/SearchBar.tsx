@@ -5,6 +5,7 @@ import {
   StyleProp,
   StyleSheet,
   TextInput,
+  View,
   ViewStyle,
 } from "react-native";
 import { radius, sizes, space, typography } from "@/constants/theme";
@@ -34,20 +35,8 @@ export function SearchBar({
   onPress,
 }: SearchBarProps) {
   const theme = useAppTheme();
-
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={!onPress}
-      style={[
-        styles.container,
-        {
-          backgroundColor: theme.colors.surfaceMuted,
-          borderColor: theme.colors.border,
-        },
-        style,
-      ]}
-    >
+  const content = (
+    <>
       <MaterialCommunityIcons
         name="magnify"
         size={20}
@@ -85,7 +74,43 @@ export function SearchBar({
           color={theme.colors.textMuted}
         />
       )}
-    </Pressable>
+    </>
+  );
+
+  if (onPress) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Search products"
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.container,
+          {
+            backgroundColor: theme.colors.surfaceMuted,
+            borderColor: theme.colors.border,
+            opacity: pressed ? 0.75 : 1,
+          },
+          style,
+        ]}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: theme.colors.surfaceMuted,
+          borderColor: theme.colors.border,
+        },
+        style,
+      ]}
+    >
+      {content}
+    </View>
   );
 }
 

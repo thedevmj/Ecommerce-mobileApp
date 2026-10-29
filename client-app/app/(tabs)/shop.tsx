@@ -1,6 +1,12 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   FlatList,
   Pressable,
@@ -36,19 +42,27 @@ import {
 } from "@/lib/shopFilters";
 import { cartCount, useCartStore } from "@/store/cartStore";
 import { useProductsStore } from "@/store/productStore";
+import { Product } from "@/type";
 
 export default function ShopScreen() {
   const theme = useAppTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ category?: string }>();
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
   const [sort, setSort] = useState<SortKey>(DEFAULT_SORT);
   const [filters, setFilters] = useState<ShopFilters>(DEFAULT_FILTERS);
   const [filtersVisible, setFiltersVisible] = useState(false);
-  const category = params.category ?? "all";
+  const categoryParam = params.category;
+  const category = Array.isArray(categoryParam)
+    ? categoryParam[0] ?? "all"
+    : categoryParam ?? "all";
   const setCategory = (value: string) => router.setParams({ category: value });
-  const { products, categories, loading, fetchProducts, fetchCategories } =
-    useProductsStore();
+  const products = useProductsStore((state) => state.products);
+  const categories = useProductsStore((state) => state.categories);
+  const loading = useProductsStore((state) => state.loading);
+  const fetchProducts = useProductsStore((state) => state.fetchProducts);
+  const fetchCategories = useProductsStore((state) => state.fetchCategories);
   const count = useCartStore((state) => cartCount(state.items));
 
   useEffect(() => {
@@ -61,8 +75,14 @@ export default function ShopScreen() {
   const presets = useMemo(() => getPricePresets(bounds), [bounds]);
 
   const results = useMemo(
-    () => selectProducts(products, { query, category, filters, sort }),
-    [products, query, category, filters, sort]
+    () =>
+      selectProducts(products, {
+        query: deferredQuery,
+        category,
+        filters,
+        sort,
+      }),
+    [products, deferredQuery, category, filters, sort]
   );
 
   const activeFilters = useMemo(() => getActiveFilters(filters), [filters]);
@@ -70,8 +90,12 @@ export default function ShopScreen() {
 
   const countForFilters = useCallback(
     (draft: ShopFilters) =>
-      countMatchingResults(products, { query, category, filters: draft }),
-    [products, query, category]
+      countMatchingResults(products, {
+        query: deferredQuery,
+        category,
+        filters: draft,
+      }),
+    [products, deferredQuery, category]
   );
 
   const resetAll = () => {
@@ -82,6 +106,15 @@ export default function ShopScreen() {
   };
 
   const isLoading = loading && products.length === 0;
+
+  const renderItem = useCallback(
+    ({ item }: { item: Product }) => (
+      <View style={styles.cardWrap}>
+        <ProductCard product={item} />
+      </View>
+    ),
+    []
+  );
 
   const header = (
     <View style={styles.headerContent}>
@@ -252,11 +285,10 @@ export default function ShopScreen() {
           columnWrapperStyle={styles.column}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => (
-            <View style={styles.cardWrap}>
-              <ProductCard product={item} />
-            </View>
-          )}
+          initialNumToRender={6}
+          maxToRenderPerBatch={6}
+          windowSize={5}
+          renderItem={renderItem}
           ListEmptyComponent={
             <EmptyState
               icon="magnify-close"

@@ -134,11 +134,13 @@ export function nextStatuses(status: OrderStatus): readonly OrderStatus[] {
   return NEXT_STATUSES[status];
 }
 
+const currencyFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+});
+
 export function formatCurrency(value: number | string | null | undefined) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(Number(value ?? 0));
+  return currencyFormatter.format(Number(value ?? 0));
 }
 
 export function formatOrderDate(value: string) {

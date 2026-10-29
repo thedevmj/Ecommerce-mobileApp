@@ -31,7 +31,7 @@ import { useAppTheme } from "@/hooks/useAppTheme";
 import { getProduct } from "@/lib/api";
 import { formatCategory, formatPrice } from "@/lib/format";
 import { useCartStore } from "@/store/cartStore";
-import { useFavoritesStore } from "@/store/favoritesStore";
+import { isFavoriteId, useFavoritesStore } from "@/store/favoritesStore";
 import { useProductsStore } from "@/store/productStore";
 import { Product } from "@/type";
 
@@ -42,8 +42,18 @@ export default function ProductScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const galleryWidth = width - space[7] * 2 - 2;
-  const [product, setProduct] = useState<Product | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [product, setProduct] = useState<Product | null>(() => {
+    return (
+      useProductsStore
+        .getState()
+        .products.find((item) => String(item.id) === String(id)) ?? null
+    );
+  });
+  const [loading, setLoading] = useState(() => {
+    return !useProductsStore
+      .getState()
+      .products.some((item) => String(item.id) === String(id));
+  });
   const [error, setError] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [imageIndex, setImageIndex] = useState(0);
@@ -56,7 +66,9 @@ export default function ProductScreen() {
   const allProducts = useProductsStore((state) => state.products);
   const fetchProducts = useProductsStore((state) => state.fetchProducts);
 
-  const isFavorite = product ? favoriteIds.includes(product.id) : false;
+  const isFavorite = product
+    ? isFavoriteId(favoriteIds, product.id)
+    : false;
 
   const refreshProduct = useCallback(() => {
     getProduct(String(id))
@@ -66,26 +78,46 @@ export default function ProductScreen() {
 
   useEffect(() => {
     let active = true;
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await getProduct(id as string);
-        if (active) setProduct(data);
-      } catch {
-        if (active) setError("We couldn't load this product. Please try again.");
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
+    const currentMatches = product && String(product.id) === String(id);
 
-    load();
-    if (allProducts.length === 0) fetchProducts();
+    if (!currentMatches) {
+      const cached = useProductsStore
+        .getState()
+        .products.find((item) => String(item.id) === String(id));
+
+      const load = async () => {
+        if (cached) {
+          if (active) {
+            setProduct(cached);
+            setLoading(false);
+            setError(null);
+          }
+          return;
+        }
+
+        setLoading(true);
+        setError(null);
+        try {
+          const data = await getProduct(String(id));
+          if (active) setProduct(data);
+        } catch {
+          if (active) {
+            setError("We couldn't load this product. Please try again.");
+          }
+        } finally {
+          if (active) setLoading(false);
+        }
+      };
+
+      load();
+    }
+
+    if (useProductsStore.getState().products.length === 0) fetchProducts();
 
     return () => {
       active = false;
     };
-  }, [id, allProducts.length, fetchProducts]);
+  }, [id, fetchProducts, product]);
 
   const images = useMemo(() => {
     if (!product) return [];
@@ -101,6 +133,29 @@ export default function ProductScreen() {
       )
       .slice(0, 8);
   }, [allProducts, product]);
+
+  const handleToggleFavorite = async () => {
+    if (!product) return;
+
+    const result = await toggleFavorite(product.id);
+
+    if (result.error) {
+      Toast.show({
+        type: "error",
+        text1: "Could not update favorites",
+        text2: result.error,
+        visibilityTime: 2200,
+      });
+      return;
+    }
+
+    Toast.show({
+      type: "success",
+      text1: result.favorite ? "Saved to favorites" : "Removed from favorites",
+      text2: product.title,
+      visibilityTime: 1500,
+    });
+  };
 
   const handleAddToCart = (goToCart = false) => {
     if (!product) return;
@@ -175,7 +230,7 @@ export default function ProductScreen() {
         title="Product details"
         showFavorite
         isFav={isFavorite}
-        handleToggleFavorite={() => toggleFavorite(product.id)}
+        handleToggleFavorite={handleToggleFavorite}
       />
       <KeyboardAvoidingView
         style={styles.flex}

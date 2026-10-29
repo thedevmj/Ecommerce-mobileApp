@@ -11,6 +11,7 @@ export interface User {
 interface AuthState {
   user: User | null;
   isLoading: boolean;
+  initialized: boolean;
   error: string | null;
 
   // Auth actions
@@ -23,12 +24,13 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isLoading: false,
+  initialized: false,
   error: null,
 
   //   Login with email and password
   login: async (email: string, password: string) => {
     if (!isSupabaseConfigured) {
-      set({ error: NOT_CONFIGURED });
+      set({ error: NOT_CONFIGURED, initialized: true });
       return;
     }
 
@@ -48,15 +50,16 @@ export const useAuthStore = create<AuthState>((set) => ({
             email: data.user.email || "",
           },
           isLoading: false,
+          initialized: true,
         });
       }
     } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+      set({ error: error.message, isLoading: false, initialized: true });
     }
   },
   signup: async (email: string, password: string) => {
     if (!isSupabaseConfigured) {
-      set({ error: NOT_CONFIGURED });
+      set({ error: NOT_CONFIGURED, initialized: true });
       return;
     }
 
@@ -71,15 +74,16 @@ export const useAuthStore = create<AuthState>((set) => ({
         set({
           user: { id: data.user.id, email: data.user.email || "" },
           isLoading: false,
+          initialized: true,
         });
       }
     } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+      set({ error: error.message, isLoading: false, initialized: true });
     }
   },
   logout: async () => {
     if (!isSupabaseConfigured) {
-      set({ user: null, error: null });
+      set({ user: null, error: null, initialized: true });
       return;
     }
 
@@ -87,14 +91,14 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ isLoading: true, error: null });
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      set({ user: null, isLoading: false });
+      set({ user: null, isLoading: false, initialized: true });
     } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+      set({ error: error.message, isLoading: false, initialized: true });
     }
   },
   checkSession: async () => {
     if (!isSupabaseConfigured) {
-      set({ user: null, error: null });
+      set({ user: null, error: null, initialized: true });
       return;
     }
 
@@ -110,12 +114,13 @@ export const useAuthStore = create<AuthState>((set) => ({
             email: user.email || "",
           },
           isLoading: false,
+          initialized: true,
         });
       } else {
-        set({ user: null, isLoading: false });
+        set({ user: null, isLoading: false, initialized: true });
       }
     } catch (error: any) {
-      set({ user: null, error: error.message, isLoading: false });
+      set({ user: null, error: error.message, isLoading: false, initialized: true });
     }
   },
 }));

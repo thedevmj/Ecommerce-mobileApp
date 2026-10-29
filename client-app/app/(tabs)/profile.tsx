@@ -32,7 +32,7 @@ const shoppingLinks: MenuItem[] = [
 ];
 
 const supportLinks: MenuItem[] = [
-  { icon: "help-circle-outline", label: "Help center" },
+  { icon: "message-text-outline", label: "Help & enquiries" },
   { icon: "shield-lock-outline", label: "Privacy & security" },
   { icon: "information-outline", label: "About shopcart" },
 ];
@@ -243,7 +243,17 @@ export default function ProfileScreen() {
           />
         </View>
 
-        <MenuGroup title="Support" items={supportLinks} onPress={showComingSoon} />
+        <MenuGroup
+          title="Support"
+          items={supportLinks}
+          onPress={(label) => {
+            if (label === "Help & enquiries") {
+              router.push("/enquiries");
+              return;
+            }
+            showComingSoon(label);
+          }}
+        />
 
         <Text style={[styles.version, { color: theme.colors.textMuted }]}>
           shopcart v1.0.0

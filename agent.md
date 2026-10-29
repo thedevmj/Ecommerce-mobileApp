@@ -11,20 +11,58 @@ This file captures what was done across sessions and what remains to continue la
 - Core flows complete: Home, Shop (with Filter & Sort), Search, Favorites, Cart, Product details (with Reviews), Profile, Auth (modal), Checkout (COD only), Orders, Address book, Not found.
 - Payments: **cash on delivery only** — no card/wallet gateway. Orders store `payment_method = 'cod'`. Admin Phases 1–5 are complete: roles + RLS, admin shell/auth, orders management, catalog/category/image/review management, and customers/coupons/metrics.
 - Latest admin work: admin account settings (name, login email, contact phone) and password recovery are implemented, alongside Phase 5 customer directory, coupon CRUD, dashboard metrics, inline orders-list status dropdown, and one-step order status undo. Apply `0005`, `0006`, and `0007` for image uploads, customer email search, and undo; apply `0008` for enquiries. Configure the Supabase `/auth/callback` redirect URL for reset and email-change links.
-- Latest mobile work: keyboard avoidance is fixed across Auth, Address form, Filter & Sort, Cart, and Product details (including reviews). Android now uses `softwareKeyboardLayoutMode: "resize"` and `KeyboardAvoidingView` `height` behavior; cart/product action bars lift above the keyboard.
-- In progress: customer enquiries. Database migration, mobile data helpers, and the mobile enquiry form/history screen are written, but the screen is not linked from Profile/navigation and the admin-side workflow is not built. `0008_enquiries.sql` has not been applied.
+- Latest mobile work: favorites are now account-synced and resilient: guest favorites merge into the account on login, account switches/sign-out clear safely, Supabase writes are optimistic with rollback, and the Favorites screen has loading/error/retry, unavailable-item cleanup, pull-to-refresh, and clear-all confirmation.
+- Latest performance work: catalog fetches are deduplicated, product cards are memoized with per-card favorite subscriptions, search/shop filtering is deferred and indexed, Favorites uses a product map, formatters are hoisted, product detail reuses cached products, and admin auth/review/product queries were consolidated.
+- Latest bug-fix work: hardened the home header/search controls against malformed persisted favorites, separated the non-editable home search trigger from the editable search input, and made Shop category params and product text filtering tolerant of router/data shapes. This preserves existing search, favorites, and filter behavior while preventing blank-screen/runtime failures.
+- Latest crash fix: made the Supabase SecureStore adapter safe when Expo Router initializes routes in a web/static-rendering context without `localStorage`. This was causing route navigation to fail with a blank screen; native SecureStore behavior is unchanged.
+- Earlier mobile work: keyboard avoidance is fixed across Auth, Address form, Filter & Sort, Cart, and Product details (including reviews). Android now uses `softwareKeyboardLayoutMode: "resize"` and `KeyboardAvoidingView` `height` behavior; cart/product action bars lift above the keyboard.
+- Customer enquiries are complete end to end: mobile form/history linked from Profile, admin inbox/list/detail/status/reply workflow, dashboard metric, and navigation. `0008_enquiries.sql` still needs to be applied to the live Supabase project.
 
 ## What Was Done
 
-### Current Session — Enquiries (Work In Progress)
+### Current Session — Performance Optimization (Complete)
 
-- `supabase/migrations/0008_enquiries.sql` (untracked, not applied): adds `public.enquiries` with owner contact snapshot (`name`, `email`, `phone`), `subject`, `message`, status (`open`, `in_progress`, `resolved`, `closed`), `admin_reply`, `replied_at`, timestamps, length/status checks, indexes, updated-at trigger, grants, and RLS.
+- `client-app/store/productStore.ts`: added in-flight request deduplication for products/categories, a shared pending-request loading counter, and persisted only `products`/`categories`; removed the unused `filteredProducts` mirror.
+- `client-app/components/ProductCard.tsx`: wrapped in `React.memo`, subscribes only to its own boolean favorite state via `isFavoriteId`, and uses `expo-image` with memory/disk caching.
+- `client-app/app/(tabs)/index.tsx`, `shop.tsx`, `search.tsx`: switched to field selectors, hoisted list `renderItem` callbacks where applicable, added FlatList windowing props, deferred Shop/Search filtering with `useDeferredValue`, and precomputed a lowercase search index.
+- `client-app/app/(tabs)/favorites.tsx`: replaced repeated `find`/`some` scans with a `Map`, memoized the render callback, and added FlatList windowing props.
+- `client-app/app/product/[id].tsx`: initializes from the catalog cache when available, only fetches when the cached product does not match the route, and avoids duplicate catalog requests.
+- `client-app/lib/format.ts`: hoisted the `Intl.NumberFormat` instance.
+- `admin-app/lib/admin.ts`: added `React.cache`-backed `getAdminIdentity`, now returns role/profile data so the dashboard layout, account page, and actions share one auth/profile lookup per request.
+- `admin-app/app/dashboard/reviews/page.tsx`: runs rating counts, the review page, and the total count in one parallel phase before the dependent profile lookup.
+- `admin-app/app/dashboard/page.tsx`: revenue now uses a PostgREST `total.sum()` aggregate with a paginated-scan fallback for older PostgREST configurations.
+- `admin-app/app/dashboard/products/actions.ts`: category and slug checks now run in parallel for create and update.
+- `admin-app/components/catalog/ProductGalleryField.tsx`: gallery uploads run in parallel while preserving selection order.
+- `admin-app/lib/catalog.ts`, `lib/orders.ts`: hoisted currency/date formatters.
+- No migrations added. Dashboard aggregate behavior should be checked against the live Supabase/PostgREST configuration.
+- Verified: client `rtk tsc --noEmit` and `rtk npm run lint` pass; admin `rtk lint .`, `rtk tsc --noEmit`, and `rtk npm run build` pass.
+
+### Earlier Session — Favorites Reliability & Sync (Complete)
+
+- `store/favoritesStore.ts`: rewrote favorites around `ids` + `ownerId` with persisted `shopcart-favorites` storage. Adds `toggle`, `remove`, `removeMany`, `clear`, `syncForUser`, `retrySync`, `reset`, loading/sync/error flags, UUID-gated Supabase writes, optimistic updates with targeted rollback, guest-to-account merging, account-switch isolation, sign-out clearing, and the `isFavoriteId` helper for mixed string/number product IDs.
+- `app/(tabs)/_layout.tsx`: syncs favorites whenever the auth user changes, after both auth initialization and favorites hydration (via `useSyncExternalStore` + `persist.hasHydrated`) to avoid stale-persisted overwrites.
+- `store/authStore.ts`: added `initialized` so startup sync waits for session restoration instead of treating the initial `null` user as signed out.
+- `app/(tabs)/favorites.tsx`: rebuilt the screen with product loading state, sync/product error banners with retry, pull-to-refresh, unavailable-item detection with "Remove unavailable", clear-all confirmation + Toast feedback, guest vs account sync caption, and empty/error states. It auto-fetches products when the catalog cache is empty.
+- `components/ProductCard.tsx`, `app/product/[id].tsx`: favorite toggles are now awaited with success/error Toast feedback and mixed-ID-safe checks; card heart/add-to-cart presses stop propagation so they do not open the product.
+- No new migration required; `public.favorites` and its owner-only RLS policies already exist in `0001_init.sql`.
+- Verified: `rtk tsc --noEmit` and `rtk npm run lint` pass in `client-app`.
+- Remaining QA: sign in on two accounts and confirm favorites isolate/merge correctly, toggle while offline (rollback + error Toast), remove unavailable saved items, clear all, and verify a guest heart survives login.
+
+### Earlier Session — Enquiries (Complete)
+
+- `supabase/migrations/0008_enquiries.sql` (not applied): adds `public.enquiries` with owner contact snapshot (`name`, `email`, `phone`), `subject`, `message`, status (`open`, `in_progress`, `resolved`, `closed`), `admin_reply`, `replied_at`, timestamps, length/status checks, indexes, updated-at trigger, grants, and RLS.
 - Enquiries RLS: customers can insert/select only their own rows; admins can manage all rows via `public.is_admin()`.
-- `client-app/lib/enquiries.ts` (untracked): enquiry/status types, status metadata, validation, Supabase fetch/create helpers, and row mapping.
-- `client-app/app/enquiries.tsx` (untracked, not routed or linked yet): signed-out gate, reply-email card, subject/message form with validation and character count, pull-to-refresh, loading/error/empty states, history cards with status badges, and support-reply display. Uses the keyboard-avoidance pattern (`padding` iOS, `height` Android).
-- Verified after lint fix: `rtk tsc --noEmit` and `rtk npm run lint` pass in `client-app`.
-- Not started: Profile/navigation link, admin list/detail/reply UI, admin actions/navigation, dashboard surfacing, migration application, live RLS/QA.
-- `0005`–`0007` remain unapplied; `0008` should be applied after them.
+- `client-app/lib/enquiries.ts`: enquiry/status types, status metadata, validation, Supabase fetch/create helpers, and row mapping.
+- `client-app/app/enquiries.tsx`: signed-out gate, reply-email card, subject/message form with validation and character count, pull-to-refresh, loading/error/empty states, history cards with status badges, and support-reply display. Uses the keyboard-avoidance pattern (`padding` iOS, `height` Android).
+- `client-app/app/_layout.tsx`: registers `enquiries`; `app/(tabs)/profile.tsx` now routes "Help & enquiries" to it.
+- `admin-app/lib/enquiries.ts`: enquiry/status types, status metadata/tones, author/initial/date helpers, and reply validation.
+- `admin-app/app/dashboard/enquiries/page.tsx`: status tabs/counts, subject/name/email/message search, pagination, reply indicator, and migration/RLS error state.
+- `admin-app/app/dashboard/enquiries/[id]/page.tsx`: full message, contact details, customer link, current reply, timeline, and status/reply form.
+- `admin-app/app/dashboard/enquiries/actions.ts`: admin-guarded status/reply update with reply-length validation, `replied_at` maintenance, and revalidation.
+- `admin-app/components/enquiries/EnquiryStatusForm.tsx`, `EnquiryStatusBadge.tsx`: client form with `useActionState` and shared status chip.
+- `admin-app/components/Sidebar.tsx`: Enquiries nav item; `app/dashboard/page.tsx`: open-enquiry stat plus Enquiries tool link.
+- Verified: `rtk tsc --noEmit` and `rtk npm run lint` pass in `client-app`; `rtk lint .`, `rtk tsc --noEmit`, and `rtk npm run build` pass in `admin-app` (new `/dashboard/enquiries` and `/dashboard/enquiries/[id]` routes).
+- Remaining: apply `0008` (after `0005`–`0007` if using `db push`) and run the live end-to-end QA in the next section.
 
 ### Earlier Session — Mobile Keyboard Handling
 
@@ -257,8 +295,8 @@ This file captures what was done across sessions and what remains to continue la
 
 ### Validation
 - `client-app`: `npx tsc --noEmit` passes, `npm run lint` passes (Expo lint), `npx expo export --platform android` succeeds.
-- Latest enquiries WIP check: `rtk tsc --noEmit` and `rtk npm run lint` pass in `client-app`; admin build/lint has not been run because no admin enquiry code exists yet.
-- `admin-app`: `rtk npm run build` passes with customer/coupon routes plus catalog/review/upload routes; `rtk lint .` and `rtk tsc --noEmit` are clean.
+- Latest enquiries check: `rtk tsc --noEmit` and `rtk npm run lint` pass in `client-app`; `rtk lint .`, `rtk tsc --noEmit`, and `rtk npm run build` pass in `admin-app` with the enquiries routes.
+- `admin-app`: `rtk npm run build` passes with customer/coupon/enquiry routes plus catalog/review/upload routes; `rtk lint .` and `rtk tsc --noEmit` are clean.
 
 ## Files Created/Modified (Key)
 
@@ -270,7 +308,7 @@ Created:
 - `lib/shopFilters.ts`
 - `lib/reviews.ts`
 - `lib/addresses.ts`
-- `lib/enquiries.ts` (WIP)
+- `lib/enquiries.ts`
 - `lib/format.ts`
 - `store/addressStore.ts`
 - `store/cartStore.ts`
@@ -278,7 +316,7 @@ Created:
 - `hooks/useAppTheme.ts`
 - `app/addresses.tsx`
 - `app/address-form.tsx`
-- `app/enquiries.tsx` (WIP, not routed/linked)
+- `app/enquiries.tsx`
 - `supabase/migrations/0001_init.sql`
 - `supabase/migrations/0002_reviewer_profiles.sql`
 - `supabase/migrations/0003_order_payment.sql`
@@ -286,7 +324,7 @@ Created:
 - `supabase/migrations/0005_catalog_storage.sql`
 - `supabase/migrations/0006_customer_directory.sql`
 - `supabase/migrations/0007_order_status_undo.sql`
-- `supabase/migrations/0008_enquiries.sql` (WIP, not applied)
+- `supabase/migrations/0008_enquiries.sql` (not applied)
 - `supabase/seed.sql`
 - `DESIGN.md`, `design-tokens.json`, `design-preview.html`
 - `client-app/.env.example`
@@ -302,12 +340,14 @@ Created:
   - `app/dashboard/reviews/page.tsx`, `actions.ts`
   - `app/dashboard/customers/page.tsx`, `[id]/page.tsx`
   - `app/dashboard/coupons/page.tsx`, `new/page.tsx`, `[code]/page.tsx`, `actions.ts`
+  - `app/dashboard/enquiries/page.tsx`, `[id]/page.tsx`, `actions.ts`
   - `app/dashboard/error.tsx`, `app/globals.css`, `app/layout.tsx`, `app/page.tsx`, `app/icon.svg`
   - `components/LoginForm.tsx`, `Sidebar.tsx`, `SignOutButton.tsx`, `Unauthorized.tsx`, `PageHeader.tsx`, `StatCard.tsx`, `ModulePlaceholder.tsx`, `OrderStatusBadge.tsx`, `OrderStatusForm.tsx`, `OrderStatusQuickForm.tsx`, `UndoOrderStatusButton.tsx`
   - `components/catalog/ProductForm.tsx`, `CategoryForm.tsx`, `ImageUploadField.tsx`, `ProductGalleryField.tsx`, `ConfirmDeleteForm.tsx`, `upload-image.ts`
   - `components/coupons/CouponForm.tsx`
+  - `components/enquiries/EnquiryStatusForm.tsx`, `EnquiryStatusBadge.tsx`
   - `components/account/AccountDetailsForm.tsx`, `PasswordResetRequestForm.tsx`, `ResetPasswordForm.tsx`
-  - `lib/orders.ts`, `lib/catalog.ts`, `lib/customers.ts`, `lib/coupons.ts`, `lib/account.ts`, `lib/request-origin.ts`, `lib/admin.ts`, `lib/supabase/client.ts`, `lib/supabase/server.ts`, `proxy.ts`, `next.config.ts`, `eslint.config.mjs`
+  - `lib/orders.ts`, `lib/catalog.ts`, `lib/customers.ts`, `lib/coupons.ts`, `lib/enquiries.ts`, `lib/account.ts`, `lib/request-origin.ts`, `lib/admin.ts`, `lib/supabase/client.ts`, `lib/supabase/server.ts`, `proxy.ts`, `next.config.ts`, `eslint.config.mjs`
   - `.env.example`, `README.md`
 - `agent.md` (this file)
 
@@ -325,39 +365,20 @@ Modified:
 
 ## What Needs To Be Done Next
 
-### Tomorrow — Finish Enquiries (start here)
-The database migration and mobile screen exist but are **not linked or applied**. Finish in this order:
+### Next — Apply 0008 and QA Enquiries (start here)
+The enquiries feature is implemented and all local checks pass. Only the migration and live QA remain:
 
-1. **Wire the mobile screen**
-   - `client-app/app/_layout.tsx`: add `<Stack.Screen name="enquiries" />` beside `orders`/`addresses`.
-   - `client-app/app/(tabs)/profile.tsx`: rename the support item `Help center` to `Help & enquiries` (keep `help-circle-outline` or use `message-text-outline`), route it to `/enquiries`, and leave Privacy/About as coming-soon.
-   - The screen already handles signed-out users with a sign-in CTA; no extra auth guard is needed.
-2. **Add admin helpers**
-   - Create `admin-app/lib/enquiries.ts`: enquiry type, status union/labels/tones, date formatting, reply/status validation, and list filters.
-   - Keep statuses aligned with the DB: `open`, `in_progress`, `resolved`, `closed`.
-3. **Build the admin list**
-   - Create `admin-app/app/dashboard/enquiries/page.tsx`.
-   - Fetch all enquiries ordered by `created_at desc`; add status tabs/counts, subject/name/email/message search, pagination, and rows with subject/customer/date/status/reply indicator.
-   - Link each row to the detail page. Show a clear migration/RLS error state if `0008` is missing.
-4. **Build the admin detail + reply flow**
-   - Create `admin-app/app/dashboard/enquiries/[id]/page.tsx`: full message, contact details, account/customer link if available, current status, admin reply, and timestamps.
-   - Create `components/enquiries/EnquiryStatusForm.tsx` (client form using `useActionState`) and `components/enquiries/EnquiryStatusBadge.tsx`.
-   - Create `app/dashboard/enquiries/actions.ts`: call `getAdminSession()`, validate ID/status/reply, update `status`, `admin_reply`, and `replied_at` (`null` when reply is cleared), then `revalidatePath`.
-5. **Surface it in admin navigation**
-   - `components/Sidebar.tsx`: add an Enquiries item (use the already-imported `MessageSquare` or `MessagesSquare`) for desktop and mobile nav.
-   - `app/dashboard/page.tsx`: add an Enquiries tool link and/open-enquiry count. Adjust the stat grid if adding a fifth card.
-6. **Apply migrations**
+1. **Apply migrations**
    - Apply `0005`, `0006`, `0007`, then `0008_enquiries.sql` via `supabase db push` or the SQL editor. `0008` depends on `is_admin()` from `0004` but not on `0005`–`0007`.
    - Verify RLS with two customers: A can read only A's enquiries, customers cannot update/delete, and an admin can list/reply to all.
-7. **Validate**
-   - `client-app`: `rtk tsc --noEmit`, `rtk npm run lint`, and optionally `npx expo export --platform android`.
-   - `admin-app`: `rtk lint .`, `rtk tsc --noEmit`, and `rtk npm run build`.
-8. **End-to-end QA**
+2. **End-to-end QA**
    - Submit an enquiry as a customer → confirm it appears immediately in mobile history → open it in admin → set status and reply → pull-to-refresh mobile and confirm the badge/reply.
+   - Check that clearing the admin reply removes it from mobile and sets `replied_at` to null.
    - Check signed-out gate, empty/error states, 3/10-character validation, 140/4,000 limits, long messages, dark mode, and keyboard behavior on the message field.
-9. **Docs after completion**
-   - Update `admin-app/README.md` for migration `0008` and the enquiries module.
-   - Replace the WIP notes in this file with completed work and QA results.
+   - Confirm the dashboard open-enquiry count and list/detail links work after the migration.
+3. **Optional validation**
+   - `client-app`: rerun `rtk tsc --noEmit`, `rtk npm run lint`, and optionally `npx expo export --platform android`.
+   - `admin-app`: rerun `rtk lint .`, `rtk tsc --noEmit`, and `rtk npm run build` if any code changes.
 
 ### Immediate (Functional)
 1. **Connect Supabase env**: add `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` to `client-app/.env` (dev fallbacks exist in `config.ts`). Run `supabase db push` and `supabase/seed.sql`.
@@ -412,4 +433,27 @@ npm run dev
 # or
 npm run build && npm run lint
 ```
-Read this file first to understand scope. Priority: finish enquiries (wire the mobile route/profile link, build admin list/detail/reply, apply `0008_enquiries.sql`); then apply `0005`–`0007`, add the Supabase `/auth/callback` redirect URL, QA account/password recovery plus catalog/review/customer/coupon/order-undo flows in `admin-app/`, and verify mobile sync.
+Read this file first to understand scope. Priority: apply `0005`–`0008`, then QA the enquiries round trip and RLS; add the Supabase `/auth/callback` redirect URL, QA account/password recovery plus catalog/review/customer/coupon/order-undo flows in `admin-app/`, and verify mobile sync.
+
+## Recent Updates (Oct 29 2026)
+
+### Palette & UI
+- Applied Color Hunt palette (#D90000, #FFEA93, #8DB355, #000000) across client and admin.
+- Updated client-app/constants/theme.ts, constants/Colors.ts with new tokens.
+- Recolored status badges in client-app/app/orders.tsx and link color in components/ThemedText.tsx.
+- Updated admin theme tokens in dmin-app/app/globals.css.
+- Fixed ProductCard + Price layout so long prices scale/shrink without pushing the plus button.
+
+### Favorites
+- Fixed favorites page loading to render cached favorites without blocking on sync/load.
+- Favorites sync remains via syncForUser but loading gates relaxed; banners for sync/errors preserved.
+
+### API Performance & Safety
+- Added pagination support to client-app/lib/api.ts (getProducts accepts page/limit/category/search, range queries for Supabase).
+- Added in-memory rate limiting for getProducts and getCategories. Default fetch uses page:1, limit:100.
+- Client TypeScript passes after changes.
+
+### Next Plans
+- Consider server-side pagination/infinite scroll for shop/favorites lists.
+- Add Redis/edge rate limiting for production.
+- Test favorites loading on cold start with/without auth.

@@ -62,14 +62,12 @@ export default function HomeScreen() {
   const router = useRouter();
   const theme = useAppTheme();
   const [refreshing, setRefreshing] = useState(false);
-  const {
-    products,
-    categories,
-    loading,
-    error,
-    fetchProducts,
-    fetchCategories,
-  } = useProductsStore();
+  const products = useProductsStore((state) => state.products);
+  const categories = useProductsStore((state) => state.categories);
+  const loading = useProductsStore((state) => state.loading);
+  const error = useProductsStore((state) => state.error);
+  const fetchProducts = useProductsStore((state) => state.fetchProducts);
+  const fetchCategories = useProductsStore((state) => state.fetchCategories);
 
   const featuredProducts = useMemo(() => products.slice(0, 6), [products]);
   const newArrivals = useMemo(() => products.slice(6, 14), [products]);

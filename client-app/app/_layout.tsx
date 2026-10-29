@@ -65,6 +65,7 @@ export default function RootLayout() {
         <Stack.Screen name="orders" />
         <Stack.Screen name="addresses" />
         <Stack.Screen name="address-form" />
+        <Stack.Screen name="enquiries" />
         <Stack.Screen name="auth" options={{ presentation: "modal" }} />
         <Stack.Screen name="+not-found" />
       </Stack>

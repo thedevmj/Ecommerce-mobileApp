@@ -97,18 +97,17 @@ export default async function ReviewsPage({
     );
   }
 
-  const ratingCounts = await Promise.all(
-    [5, 4, 3, 2, 1].map(async (value) => {
-      const { count } = await supabase
-        .from("reviews")
-        .select("id", { count: "exact", head: true })
-        .eq("rating", value);
+  const [ratingCounts, reviewsResult, allCountResult] = await Promise.all([
+    Promise.all(
+      [5, 4, 3, 2, 1].map(async (value) => {
+        const { count } = await supabase
+          .from("reviews")
+          .select("id", { count: "exact", head: true })
+          .eq("rating", value);
 
-      return [value, count ?? 0] as const;
-    })
-  );
-
-  const [reviewsResult, allCountResult] = await Promise.all([
+        return [value, count ?? 0] as const;
+      })
+    ),
     reviewsQuery.range(
       (page - 1) * CATALOG_PAGE_SIZE,
       page * CATALOG_PAGE_SIZE - 1

@@ -3,6 +3,7 @@ import {
   CircleDollarSign,
   FolderTree,
   MessageSquare,
+  MessagesSquare,
   Package,
   PackageSearch,
   ShoppingBag,
@@ -23,16 +24,38 @@ export default async function DashboardPage() {
 
   const [
     ordersToday,
-    deliveredOrders,
+    deliveredRevenue,
     lowStock,
     customers,
     pendingOrders,
+    openEnquiries,
   ] = await Promise.all([
     supabase
       .from("orders")
       .select("id", { count: "exact", head: true })
       .gte("placed_at", startOfToday.toISOString()),
-    supabase.from("orders").select("total").eq("status", "delivered"),
+    supabase
+      .from("orders")
+      .select("total.sum()")
+      .eq("status", "delivered")
+      .then(async ({ data, error }) => {
+        const aggregate = Array.isArray(data) ? data[0] : null;
+
+        if (!error && aggregate && typeof aggregate === "object") {
+          return Number(aggregate.sum ?? 0);
+        }
+
+        const { data: orders } = await supabase
+          .from("orders")
+          .select("total")
+          .eq("status", "delivered");
+
+        return (orders ?? []).reduce(
+          (sum: number, order: { total: number | string | null }) =>
+            sum + Number(order.total ?? 0),
+          0
+        );
+      }),
     supabase
       .from("products")
       .select("id", { count: "exact", head: true })
@@ -43,12 +66,13 @@ export default async function DashboardPage() {
       .from("orders")
       .select("id", { count: "exact", head: true })
       .eq("status", "pending"),
+    supabase
+      .from("enquiries")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "open"),
   ]);
 
-  const revenue = (deliveredOrders.data ?? []).reduce(
-    (sum, order) => sum + Number(order.total ?? 0),
-    0
-  );
+  const revenue = deliveredRevenue;
   const pending = pendingOrders.count ?? 0;
 
   const stats = [
@@ -76,6 +100,12 @@ export default async function DashboardPage() {
       hint: "Registered customer profiles.",
       icon: Users,
     },
+    {
+      label: "Open enquiries",
+      value: openEnquiries.count ?? 0,
+      hint: "Customer messages awaiting a reply.",
+      icon: MessagesSquare,
+    },
   ];
 
   return (
@@ -86,7 +116,7 @@ export default async function DashboardPage() {
         description="A live snapshot of the Shopcart store with the tools to process orders, manage the catalog, and support customers."
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {stats.map((stat) => (
           <StatCard key={stat.label} {...stat} />
         ))}
@@ -188,6 +218,12 @@ export default async function DashboardPage() {
                 detail: "Read feedback and remove bad reviews",
                 icon: MessageSquare,
               },
+              {
+                href: "/dashboard/enquiries",
+                label: "Enquiries",
+                detail: "Reply to customer support messages",
+                icon: MessagesSquare,
+              },
             ].map((item) => {
               const Icon = item.icon;
 
@@ -215,8 +251,9 @@ export default async function DashboardPage() {
           </div>
 
           <p className="mt-4 text-xs leading-5 text-muted">
-            Apply `0005_catalog_storage.sql` for uploads and
-            `0006_customer_directory.sql` for customer email search.
+            Apply `0005_catalog_storage.sql` for uploads,
+            `0006_customer_directory.sql` for customer email search, and
+            `0008_enquiries.sql` for the enquiries inbox.
           </p>
         </section>
       </div>

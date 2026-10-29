@@ -2,6 +2,7 @@
 
 import {
   LayoutDashboard,
+  MessagesSquare,
   Package,
   ShoppingBag,
   Star,
@@ -29,6 +30,7 @@ export const navItems: NavItem[] = [
   { href: "/dashboard/customers", label: "Customers", icon: Users },
   { href: "/dashboard/coupons", label: "Coupons", icon: TicketPercent },
   { href: "/dashboard/reviews", label: "Reviews", icon: Star },
+  { href: "/dashboard/enquiries", label: "Enquiries", icon: MessagesSquare },
   { href: "/dashboard/account", label: "Account", icon: UserRound },
 ];
 
